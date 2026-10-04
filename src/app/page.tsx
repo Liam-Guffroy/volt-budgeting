@@ -1,25 +1,63 @@
+import { cookies } from "next/headers";
 import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   expenses as expensesTable,
   oneTimeExpenses,
+  oneTimeIncomes,
   settings,
 } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { summarize, type BudgetExpense, type OneTimeExpense } from "@/lib/budget";
+import { summarize, type BudgetExpense, type OneTimeEntry } from "@/lib/budget";
+import { COLLAPSE_COOKIE, parseCollapsed, type SectionId } from "@/lib/collapse";
 import { formatEUR } from "@/lib/format";
 import { formatMonth, toMonth } from "@/lib/month";
 import { requireUser } from "@/lib/session";
-import { logout } from "./actions";
+import {
+  addOneTimeExpense,
+  addOneTimeIncome,
+  deleteOneTimeExpense,
+  deleteOneTimeIncome,
+  logout,
+} from "./actions";
+import { Collapsible } from "./collapsible";
 import { ExpenseForm } from "./expense-form";
 import { ExpenseRow } from "./expense-row";
 import { IncomeForm } from "./income-form";
 import { MonthNav } from "./month-nav";
-import { OneTimeForm } from "./one-time-form";
-import { OneTimeRow } from "./one-time-row";
+import { OneTimeSection } from "./one-time-section";
 import { ResultsPanel } from "./results-panel";
 import { ThemeToggle } from "./theme-toggle";
+
+// The everyday one-offs: logged several times a month.
+const ONE_TIME_COST_PRESETS = [
+  "Boodschappen",
+  "Drank",
+  "Tanken",
+  "Uit eten",
+  "Kleding",
+  "Cadeau",
+  "Apotheek",
+  "Herstelling",
+];
+
+// One-off income that commonly lands in a Belgian household's year.
+const ONE_TIME_INCOME_PRESETS = [
+  "Vakantiegeld",
+  "Eindejaarspremie",
+  "Bonus",
+  "Terugbetaling",
+  "Verkoop",
+  "Cadeau",
+];
+
+/** DB numeric rows -> plain entries for the budget math. */
+function toEntries(
+  rows: { id: number; name: string; amount: string }[],
+): OneTimeEntry[] {
+  return rows.map((r) => ({ id: r.id, name: r.name, amount: Number(r.amount) }));
+}
 
 export default async function PlannerPage({
   searchParams,
@@ -30,7 +68,10 @@ export default async function PlannerPage({
   const month = toMonth((await searchParams).month);
   const monthLabel = formatMonth(month);
 
-  const [rows, settingRow, oneTimeRows] = await Promise.all([
+  const collapsed = parseCollapsed((await cookies()).get(COLLAPSE_COOKIE)?.value);
+  const isOpen = (id: SectionId) => !collapsed.has(id);
+
+  const [rows, settingRow, oneTimeCostRows, oneTimeIncomeRows] = await Promise.all([
     db
       .select()
       .from(expensesTable)
@@ -41,12 +82,16 @@ export default async function PlannerPage({
       .select()
       .from(oneTimeExpenses)
       .where(
-        and(
-          eq(oneTimeExpenses.userId, userId),
-          eq(oneTimeExpenses.month, month),
-        ),
+        and(eq(oneTimeExpenses.userId, userId), eq(oneTimeExpenses.month, month)),
       )
       .orderBy(asc(oneTimeExpenses.id)),
+    db
+      .select()
+      .from(oneTimeIncomes)
+      .where(
+        and(eq(oneTimeIncomes.userId, userId), eq(oneTimeIncomes.month, month)),
+      )
+      .orderBy(asc(oneTimeIncomes.id)),
   ]);
 
   const income = settingRow[0] ? Number(settingRow[0].monthlyIncome) : 0;
@@ -58,13 +103,10 @@ export default async function PlannerPage({
     frequency: r.frequency,
   }));
 
-  const oneTime: OneTimeExpense[] = oneTimeRows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    amount: Number(r.amount),
-  }));
+  const oneTime = toEntries(oneTimeCostRows);
+  const oneTimeIncome = toEntries(oneTimeIncomeRows);
 
-  const summary = summarize(income, parsed, oneTime);
+  const summary = summarize(income, parsed, oneTime, oneTimeIncome);
   const incomeInput = income ? String(income).replace(".", ",") : "";
 
   return (
@@ -91,46 +133,62 @@ export default async function PlannerPage({
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
-        {/* Left: inputs, ordered by how often you touch them — one-off costs
-            (groceries, a repair) get typed in constantly, recurring costs now
-            and then, income basically once. */}
+        {/* Left: inputs. The month-specific sections come first (one-off costs
+            are typed in constantly), then the ones that hold every month. Each
+            folds away to its header and remembers that per browser. */}
         <div className="space-y-8">
-          <section className="space-y-4">
-            <div>
-              <h2 className="font-medium">Eenmalige kosten</h2>
-              <p className="text-sm text-muted-foreground">
-                Alleen voor {monthLabel} — telt niet mee in andere maanden.
-              </p>
-            </div>
+          <Collapsible
+            id="eenmalige-kosten"
+            title="Eenmalige kosten"
+            description={`Alleen voor ${monthLabel} — telt niet mee in andere maanden.`}
+            summary={formatEUR(summary.oneTimeTotal)}
+            defaultOpen={isOpen("eenmalige-kosten")}
+          >
+            <OneTimeSection
+              month={month}
+              monthLabel={monthLabel}
+              entries={oneTime}
+              total={summary.oneTimeTotal}
+              addAction={addOneTimeExpense}
+              deleteAction={deleteOneTimeExpense}
+              presets={ONE_TIME_COST_PRESETS}
+              placeholder="bv. Boodschappen"
+              idPrefix="one-time"
+              variant="expense"
+              emptyText="Geen eenmalige kosten"
+              totalLabel="Totaal eenmalig"
+            />
+          </Collapsible>
 
-            <Card className="p-6">
-              <OneTimeForm month={month} />
-            </Card>
+          <Collapsible
+            id="eenmalige-inkomsten"
+            title="Eenmalige inkomsten"
+            description={`Bovenop je vaste inkomen, alleen voor ${monthLabel}.`}
+            summary={`+ ${formatEUR(summary.oneTimeIncomeTotal)}`}
+            defaultOpen={isOpen("eenmalige-inkomsten")}
+          >
+            <OneTimeSection
+              month={month}
+              monthLabel={monthLabel}
+              entries={oneTimeIncome}
+              total={summary.oneTimeIncomeTotal}
+              addAction={addOneTimeIncome}
+              deleteAction={deleteOneTimeIncome}
+              presets={ONE_TIME_INCOME_PRESETS}
+              placeholder="bv. Vakantiegeld"
+              idPrefix="one-time-income"
+              variant="income"
+              emptyText="Geen eenmalige inkomsten"
+              totalLabel="Totaal eenmalig inkomen"
+            />
+          </Collapsible>
 
-            <Card className="overflow-hidden">
-              {oneTime.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-muted-foreground">
-                  Geen eenmalige kosten in {monthLabel}.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {oneTime.map((e) => (
-                    <OneTimeRow key={e.id} expense={e} />
-                  ))}
-                  <li className="flex items-center justify-between bg-muted px-4 py-3">
-                    <p className="font-medium">Totaal eenmalig</p>
-                    <p className="tabular-nums font-semibold">
-                      {formatEUR(summary.oneTimeTotal)}
-                    </p>
-                  </li>
-                </ul>
-              )}
-            </Card>
-          </section>
-
-          <section className="space-y-4">
-            <h2 className="font-medium">Terugkerende kosten</h2>
-
+          <Collapsible
+            id="terugkerende-kosten"
+            title="Terugkerende kosten"
+            summary={`${formatEUR(summary.regularTotal + summary.reserveTotal)} / mnd`}
+            defaultOpen={isOpen("terugkerende-kosten")}
+          >
             <Card className="p-6">
               <ExpenseForm />
             </Card>
@@ -153,18 +211,27 @@ export default async function PlannerPage({
                 </ul>
               )}
             </Card>
-          </section>
+          </Collapsible>
 
-          <section>
+          <Collapsible
+            id="inkomen"
+            title="Maandelijks netto-inkomen"
+            summary={formatEUR(income)}
+            defaultOpen={isOpen("inkomen")}
+          >
             <Card className="p-6">
               <IncomeForm defaultValue={incomeInput} />
             </Card>
-          </section>
+          </Collapsible>
         </div>
 
         {/* Right: results */}
         <aside className="lg:sticky lg:top-8 lg:self-start">
-          <ResultsPanel summary={summary} monthLabel={monthLabel} />
+          <ResultsPanel
+            summary={summary}
+            monthLabel={monthLabel}
+            reserveOpen={isOpen("reservering")}
+          />
         </aside>
       </div>
     </div>

@@ -2,16 +2,42 @@ import { Card } from "@/components/ui/card";
 import { frequencyLabel, type BudgetSummary } from "@/lib/budget";
 import { formatEUR } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Collapsible } from "./collapsible";
+
+/** The headline's formula line, mentioning one-offs only when there are any. */
+function formula(summary: BudgetSummary): string {
+  const parts = ["inkomen"];
+  if (summary.oneTimeIncomeTotal > 0) parts.push("+ eenmalig inkomen");
+  parts.push("− vaste kosten", "− reservering");
+  if (summary.oneTimeTotal > 0) parts.push("− eenmalige kosten");
+  return parts.join(" ");
+}
 
 export function ResultsPanel({
   summary,
   monthLabel,
+  reserveOpen,
 }: {
   summary: BudgetSummary;
   monthLabel: string;
+  reserveOpen: boolean;
 }) {
   const negative = summary.remaining < 0;
-  const hasOneTime = summary.oneTimeTotal > 0;
+
+  // Month-specific stats, shown only when that month has any. A lone one spans
+  // the full row; two sit side by side.
+  const oneOffStats = [
+    summary.oneTimeIncomeTotal > 0 && {
+      label: "Eenmalig inkomen",
+      value: `+ ${formatEUR(summary.oneTimeIncomeTotal)}`,
+      positive: true,
+    },
+    summary.oneTimeTotal > 0 && {
+      label: "Eenmalige kosten",
+      value: formatEUR(summary.oneTimeTotal),
+      positive: false,
+    },
+  ].filter((s) => s !== false);
 
   return (
     <div className="space-y-4">
@@ -26,64 +52,64 @@ export function ResultsPanel({
         >
           {formatEUR(summary.remaining)}
         </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          inkomen − vaste kosten − reservering
-          {hasOneTime ? " − eenmalig" : ""}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{formula(summary)}</p>
       </Card>
 
       <div className="grid grid-cols-2 gap-4">
         <Stat label="Vaste kosten / maand" value={formatEUR(summary.regularTotal)} />
         <Stat label="Reserveren / maand" value={formatEUR(summary.reserveTotal)} />
-        {hasOneTime ? (
+        {oneOffStats.map((s) => (
           <Stat
-            className="col-span-2"
-            label={`Eenmalig in ${monthLabel}`}
-            value={formatEUR(summary.oneTimeTotal)}
+            key={s.label}
+            className={oneOffStats.length === 1 ? "col-span-2" : undefined}
+            label={s.label}
+            value={s.value}
+            positive={s.positive}
           />
-        ) : null}
+        ))}
       </div>
 
       {/* Reserve breakdown — what to set aside, per irregular bill */}
-      <Card className="overflow-hidden">
-        <div className="border-b border-border px-4 py-3">
-          <h2 className="font-medium">Reservering per post</h2>
-          <p className="text-sm text-muted-foreground">
-            Maandelijks opzij te zetten voor niet-maandelijkse rekeningen
-          </p>
-        </div>
-
-        {summary.reserve.length === 0 ? (
-          <p className="px-4 py-6 text-sm text-muted-foreground">
-            Nog geen niet-maandelijkse kosten. Voeg bv. een jaarlijkse verzekering toe.
-          </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {summary.reserve.map((e) => (
-              <li key={e.id} className="flex items-center justify-between px-4 py-3">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{e.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatEUR(e.amount)} · {frequencyLabel(e.frequency)}
+      <Collapsible
+        id="reservering"
+        title="Reservering per post"
+        description="Maandelijks opzij te zetten voor niet-maandelijkse rekeningen"
+        summary={`${formatEUR(summary.reserveTotal)} / mnd`}
+        defaultOpen={reserveOpen}
+      >
+        <Card className="overflow-hidden">
+          {summary.reserve.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted-foreground">
+              Nog geen niet-maandelijkse kosten. Voeg bv. een jaarlijkse verzekering toe.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {summary.reserve.map((e) => (
+                <li key={e.id} className="flex items-center justify-between px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{e.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatEUR(e.amount)} · {frequencyLabel(e.frequency)}
+                    </p>
+                  </div>
+                  <p className="tabular-nums font-medium">
+                    {formatEUR(e.monthly)}
+                    <span className="ml-1 text-xs font-normal text-muted-foreground">
+                      /mnd
+                    </span>
                   </p>
-                </div>
-                <p className="tabular-nums font-medium">
-                  {formatEUR(e.monthly)}
-                  <span className="ml-1 text-xs font-normal text-muted-foreground">
-                    /mnd
-                  </span>
+                </li>
+              ))}
+              <li className="flex items-center justify-between bg-muted px-4 py-3">
+                <p className="font-medium">Totaal reservering</p>
+                <p className="tabular-nums font-semibold">
+                  {formatEUR(summary.reserveTotal)}
                 </p>
               </li>
-            ))}
-            <li className="flex items-center justify-between bg-muted px-4 py-3">
-              <p className="font-medium">Totaal reservering</p>
-              <p className="tabular-nums font-semibold">
-                {formatEUR(summary.reserveTotal)}
-              </p>
-            </li>
-          </ul>
-        )}
-      </Card>
+            </ul>
+          )}
+        </Card>
+      </Collapsible>
     </div>
   );
 }
@@ -92,15 +118,24 @@ function Stat({
   label,
   value,
   className,
+  positive = false,
 }: {
   label: string;
   value: string;
   className?: string;
+  positive?: boolean;
 }) {
   return (
     <Card className={cn("p-4", className)}>
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+      <p
+        className={cn(
+          "mt-1 text-xl font-semibold tabular-nums",
+          positive && "text-[var(--color-positive)]",
+        )}
+      >
+        {value}
+      </p>
     </Card>
   );
 }

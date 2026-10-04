@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { expenses, oneTimeExpenses, settings } from "@/db/schema";
+import {
+  expenses,
+  oneTimeExpenses,
+  oneTimeIncomes,
+  settings,
+} from "@/db/schema";
 import { FREQUENCY_KEYS } from "@/lib/budget";
 import { isMonthKey } from "@/lib/month";
 import { endSession, requireUser } from "@/lib/session";
@@ -232,6 +237,45 @@ export async function deleteOneTimeExpense(formData: FormData): Promise<void> {
     .delete(oneTimeExpenses)
     .where(
       and(eq(oneTimeExpenses.id, id.data.id), eq(oneTimeExpenses.userId, userId)),
+    );
+  revalidatePath("/");
+}
+
+/** Add one-off income (holiday pay, a refund…) to a specific month. */
+export async function addOneTimeIncome(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await requireUser();
+
+  const parsed = oneTimeSchema.safeParse({
+    name: formData.get("name"),
+    amount: formData.get("amount"),
+    month: formData.get("month"),
+  });
+  if (!parsed.success) return fail(parsed);
+
+  await db.insert(oneTimeIncomes).values({
+    userId,
+    month: parsed.data.month,
+    name: parsed.data.name,
+    amount: parsed.data.amount.toFixed(2),
+  });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function deleteOneTimeIncome(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const id = idSchema.safeParse({ id: formData.get("id") });
+  if (!id.success) return;
+
+  await db
+    .delete(oneTimeIncomes)
+    .where(
+      and(eq(oneTimeIncomes.id, id.data.id), eq(oneTimeIncomes.userId, userId)),
     );
   revalidatePath("/");
 }

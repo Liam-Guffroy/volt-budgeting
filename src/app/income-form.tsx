@@ -13,7 +13,9 @@ export function IncomeForm({ defaultValue }: { defaultValue: string }) {
   return (
     <form action={formAction} className="flex flex-wrap items-end gap-3">
       <div className="flex-1 min-w-[12rem] space-y-2">
-        <label htmlFor="monthlyIncome" className="text-sm font-medium text-muted-foreground">
+        {/* The section heading already says this visibly; keep the label for
+            screen readers. */}
+        <label htmlFor="monthlyIncome" className="sr-only">
           Maandelijks netto-inkomen
         </label>
         <div className="relative">

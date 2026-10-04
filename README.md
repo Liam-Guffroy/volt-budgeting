@@ -87,11 +87,13 @@ Pure functions in `src/lib/budget.ts`, no I/O:
 - **Regular** = weekly / biweekly / monthly (what you actually pay each month).
 - **Reserve** = anything less frequent than monthly, divided down to a monthly
   set-aside (a yearly €1.200 bill → €100/month).
-- **One-time** costs are filed against a single month (`YYYY-MM`) and are *not*
-  normalized — they hit only the month they belong to.
-- `summarize(income, expenses, oneTime)` returns `remaining`
-  (income − regular − reserve − oneTime), `regularTotal`, `reserveTotal`,
-  `oneTimeTotal`, and a per-bill reserve breakdown.
+- **One-time** costs and **one-time income** (holiday pay, a refund) are filed
+  against a single month (`YYYY-MM`) and are *not* normalized — they hit only
+  the month they belong to.
+- `summarize(income, expenses, oneTime, oneTimeIncome)` returns `remaining`
+  (income + oneTimeIncome − regular − reserve − oneTime), `regularTotal`,
+  `reserveTotal`, `oneTimeTotal`, `oneTimeIncomeTotal`, and a per-bill reserve
+  breakdown.
 
 Belgian euro formatting (`nl-BE`, "€ 1.234,56") lives in `src/lib/format.ts`.
 
@@ -99,12 +101,20 @@ Belgian euro formatting (`nl-BE`, "€ 1.234,56") lives in `src/lib/format.ts`.
 
 The planner is scoped to a month via `?month=YYYY-MM` (defaults to the current
 one). Recurring costs are month-independent, so they show up in every month;
-one-time costs only appear in theirs. That makes browsing back through previous
-months a real overview rather than a snapshot.
+one-time costs and income only appear in theirs. That makes browsing back
+through previous months a real overview rather than a snapshot.
 
 Month keys are plain strings and all arithmetic is integer math
 (`src/lib/month.ts`) — nothing can drift across a timezone boundary into the
 wrong month. An invalid or missing `?month=` falls back to the current month.
+
+## Collapsible sections
+
+Every planner section folds away to its header line, which keeps showing the
+section total. Which sections are folded is stored in a `vlot_collapsed` cookie
+(`src/lib/collapse.ts`) rather than localStorage, because the server can read a
+cookie: a folded section renders folded from the first byte instead of
+flashing open and snapping shut after hydration.
 
 ## Where things live
 
@@ -116,11 +126,13 @@ src/
     actions.ts             # setIncome / addExpense / updateExpense / deleteExpense / logout (Zod, userId-scoped)
     theme-toggle.tsx        # client light/dark toggle
     month-nav.tsx           # prev/next month links (?month=YYYY-MM)
+    collapsible.tsx         # client fold-away section header (state in a cookie)
     income-form.tsx         # client form -> setIncome
     expense-form.tsx        # client form -> addExpense + quick-add presets
     expense-row.tsx         # client row: inline edit + reorder + delete
-    one-time-form.tsx       # client form -> addOneTimeExpense + quick-add presets
-    one-time-row.tsx        # one-off cost row + delete
+    one-time-section.tsx    # one-off costs or income: form + month list + total
+    one-time-form.tsx       # client add form + quick-add presets (shared by both)
+    one-time-row.tsx        # one-off cost/income row + delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
     login/
@@ -132,11 +144,12 @@ src/
     password.ts             # scrypt hash/verify for stored account passwords
     budget.ts               # frequency config + pure normalization/summarize
     month.ts                # "YYYY-MM" keys: parse, shift, format (nl-BE)
+    collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     format.ts               # nl-BE euro
     utils.ts                # cn()
   db/
     index.ts                # Drizzle client (node-postgres)
-    schema.ts               # users + expenses + one-time expenses + per-user settings
+    schema.ts               # users + expenses + one-time expenses/incomes + per-user settings
   components/ui/            # button, input, label, card
 scripts/
   create-user.mjs           # provision/reset an account (npm run user:create)

@@ -8,10 +8,10 @@
  *     yearly €1.200 bill becomes a €100/month set-aside so the money is there
  *     when it lands.
  *
- * One-time costs are not normalized at all — they hit the single month they're
- * filed under, and only that month's figures.
+ * One-time costs and one-time income are not normalized at all — they hit the
+ * single month they're filed under, and only that month's figures.
  *
- * remaining = income − regularTotal − reserveTotal − oneTimeTotal
+ * remaining = income + oneTimeIncomeTotal − regularTotal − reserveTotal − oneTimeTotal
  */
 
 export type FrequencyGroup = "regular" | "reserve";
@@ -70,8 +70,8 @@ export interface NormalizedExpense extends BudgetExpense {
   monthly: number;
 }
 
-/** A one-off cost filed against a single month. */
-export interface OneTimeExpense {
+/** A one-off cost or one-off income filed against a single month. */
+export interface OneTimeEntry {
   id: number;
   name: string;
   amount: number;
@@ -86,8 +86,15 @@ export interface BudgetSummary {
   /** Sum of the one-off costs in the month being viewed. */
   oneTimeTotal: number;
   /** The one-off costs themselves, in the order passed in. */
-  oneTime: OneTimeExpense[];
-  /** income − regularTotal − reserveTotal − oneTimeTotal (can be negative). */
+  oneTime: OneTimeEntry[];
+  /** Sum of the one-off income in the month being viewed. */
+  oneTimeIncomeTotal: number;
+  /** The one-off income entries themselves, in the order passed in. */
+  oneTimeIncome: OneTimeEntry[];
+  /**
+   * income + oneTimeIncomeTotal − regularTotal − reserveTotal − oneTimeTotal
+   * (can be negative).
+   */
   remaining: number;
   /** Per-bill breakdown of the regular bills. */
   regular: NormalizedExpense[];
@@ -104,7 +111,8 @@ export interface BudgetSummary {
 export function summarize(
   income: number,
   expenses: BudgetExpense[],
-  oneTime: OneTimeExpense[] = [],
+  oneTime: OneTimeEntry[] = [],
+  oneTimeIncome: OneTimeEntry[] = [],
 ): BudgetSummary {
   const normalized: NormalizedExpense[] = expenses.map((e) => ({
     ...e,
@@ -120,7 +128,11 @@ export function summarize(
 
   const regularTotal = sum(regular);
   const reserveTotal = sum(reserve);
-  const oneTimeTotal = oneTime.reduce((total, e) => total + e.amount, 0);
+  const sumEntries = (items: OneTimeEntry[]) =>
+    items.reduce((total, e) => total + e.amount, 0);
+
+  const oneTimeTotal = sumEntries(oneTime);
+  const oneTimeIncomeTotal = sumEntries(oneTimeIncome);
 
   return {
     income,
@@ -128,7 +140,10 @@ export function summarize(
     reserveTotal,
     oneTimeTotal,
     oneTime,
-    remaining: income - regularTotal - reserveTotal - oneTimeTotal,
+    oneTimeIncomeTotal,
+    oneTimeIncome,
+    remaining:
+      income + oneTimeIncomeTotal - regularTotal - reserveTotal - oneTimeTotal,
     regular,
     reserve,
     all: normalized,

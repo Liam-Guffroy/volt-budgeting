@@ -52,6 +52,20 @@ export const oneTimeExpenses = pgTable("one_time_expenses", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// One-off income filed against a specific month ("YYYY-MM"), e.g. holiday pay
+// in June or a refund. The mirror image of `oneTimeExpenses`: it only lifts the
+// month it belongs to, on top of the regular monthly income in `settings`.
+export const oneTimeIncomes = pgTable("one_time_incomes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  month: text("month").notNull(),
+  name: text("name").notNull(),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 // One settings row per user, keyed by userId, holding the monthly take-home income.
 export const settings = pgTable("settings", {
   userId: integer("user_id")

@@ -8,8 +8,10 @@ import {
   timestamp,
 } from "drizzle-orm/pg-core";
 import { FREQUENCY_KEYS } from "../lib/budget";
+import { QUICK_ADD_KINDS } from "../lib/quick-adds";
 
 export const frequencyEnum = pgEnum("frequency", FREQUENCY_KEYS);
+export const quickAddKindEnum = pgEnum("quick_add_kind", QUICK_ADD_KINDS);
 
 // Accounts. Login is by password only (no email) — the password itself
 // identifies the person, so each account's password must be unique. `name` is
@@ -63,6 +65,19 @@ export const oneTimeIncomes = pgTable("one_time_incomes", {
   month: text("month").notNull(),
   name: text("name").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// An account's own quick-add buttons, shown after the built-ins in
+// src/lib/quick-adds.ts. `frequency` is only set for kind = "recurring".
+export const quickAdds = pgTable("quick_adds", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  kind: quickAddKindEnum("kind").notNull(),
+  name: text("name").notNull(),
+  frequency: frequencyEnum("frequency"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

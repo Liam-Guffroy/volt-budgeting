@@ -116,6 +116,15 @@ section total. Which sections are folded is stored in a `vlot_collapsed` cookie
 cookie: a folded section renders folded from the first byte instead of
 flashing open and snapping shut after hydration.
 
+## Quick-adds
+
+One-time costs, one-time income and recurring costs each have a row of
+quick-add buttons: one click fills the entry's name (and, for recurring costs,
+its frequency) so you only type the amount. The built-ins live in
+`src/lib/quick-adds.ts`; each account can add its own with **+ Eigen** (stored
+per account in `quick_adds`) and remove them with their ×. A name that already
+exists in that category — built-in or custom, ignoring case — is refused.
+
 ## Where things live
 
 ```
@@ -128,10 +137,11 @@ src/
     month-nav.tsx           # prev/next month links (?month=YYYY-MM)
     collapsible.tsx         # client fold-away section header (state in a cookie)
     income-form.tsx         # client form -> setIncome
-    expense-form.tsx        # client form -> addExpense + quick-add presets
+    expense-form.tsx        # client form -> addExpense + quick-adds
     expense-row.tsx         # client row: inline edit + reorder + delete
+    quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen
     one-time-section.tsx    # one-off costs or income: form + month list + total
-    one-time-form.tsx       # client add form + quick-add presets (shared by both)
+    one-time-form.tsx       # client add form + quick-adds (shared by both)
     one-time-row.tsx        # one-off cost/income row + delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
@@ -145,11 +155,12 @@ src/
     budget.ts               # frequency config + pure normalization/summarize
     month.ts                # "YYYY-MM" keys: parse, shift, format (nl-BE)
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
+    quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro
     utils.ts                # cn()
   db/
     index.ts                # Drizzle client (node-postgres)
-    schema.ts               # users + expenses + one-time expenses/incomes + per-user settings
+    schema.ts               # users + expenses + one-time expenses/incomes + quick-adds + settings
   components/ui/            # button, input, label, card
 scripts/
   create-user.mjs           # provision/reset an account (npm run user:create)

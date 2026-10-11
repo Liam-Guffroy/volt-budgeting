@@ -9,10 +9,16 @@ import {
   expenses,
   oneTimeExpenses,
   oneTimeIncomes,
+  quickAdds,
   settings,
 } from "@/db/schema";
 import { FREQUENCY_KEYS } from "@/lib/budget";
 import { isMonthKey } from "@/lib/month";
+import {
+  BUILT_IN_QUICK_ADDS,
+  QUICK_ADD_KINDS,
+  quickAddKey,
+} from "@/lib/quick-adds";
 import { endSession, requireUser } from "@/lib/session";
 
 export interface FormState {
@@ -43,6 +49,21 @@ const idSchema = z.object({
 const moveSchema = idSchema.extend({
   direction: z.enum(["up", "down"]),
 });
+
+const quickAddSchema = z
+  .object({
+    kind: z.enum(QUICK_ADD_KINDS),
+    name: z
+      .string()
+      .trim()
+      .min(1, "Vul een naam in.")
+      .max(40, "Maximaal 40 tekens."),
+    frequency: z.enum(FREQUENCY_KEYS).optional(),
+  })
+  .refine((d) => d.kind !== "recurring" || d.frequency !== undefined, {
+    message: "Kies een frequentie.",
+    path: ["frequency"],
+  });
 
 const oneTimeSchema = z.object({
   name: z.string().trim().min(1, "Vul een naam in.").max(120),
@@ -277,6 +298,61 @@ export async function deleteOneTimeIncome(formData: FormData): Promise<void> {
     .where(
       and(eq(oneTimeIncomes.id, id.data.id), eq(oneTimeIncomes.userId, userId)),
     );
+  revalidatePath("/");
+}
+
+/**
+ * Save one of the account's own quick-add buttons. Refuses a name that already
+ * exists in that category — built-in or custom, ignoring case — so the button
+ * row never shows the same label twice.
+ */
+export async function addQuickAdd(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await requireUser();
+
+  const parsed = quickAddSchema.safeParse({
+    kind: formData.get("kind"),
+    name: formData.get("name"),
+    frequency: formData.get("frequency") ?? undefined,
+  });
+  if (!parsed.success) return fail(parsed);
+
+  const { kind, name } = parsed.data;
+
+  const existing = await db
+    .select({ name: quickAdds.name })
+    .from(quickAdds)
+    .where(and(eq(quickAdds.userId, userId), eq(quickAdds.kind, kind)));
+
+  const taken = new Set(
+    [...BUILT_IN_QUICK_ADDS[kind], ...existing].map((q) => quickAddKey(q.name)),
+  );
+  if (taken.has(quickAddKey(name))) {
+    return { error: "Die snelknop bestaat al." };
+  }
+
+  await db.insert(quickAdds).values({
+    userId,
+    kind,
+    name,
+    frequency: kind === "recurring" ? parsed.data.frequency : null,
+  });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function deleteQuickAdd(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const id = idSchema.safeParse({ id: formData.get("id") });
+  if (!id.success) return;
+
+  await db
+    .delete(quickAdds)
+    .where(and(eq(quickAdds.id, id.data.id), eq(quickAdds.userId, userId)));
   revalidatePath("/");
 }
 

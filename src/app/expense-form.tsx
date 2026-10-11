@@ -4,27 +4,20 @@ import { useActionState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Frequency } from "@/lib/budget";
+import { FREQUENCY_KEYS } from "@/lib/budget";
+import type { QuickAdd } from "@/lib/quick-adds";
 import { addExpense, type FormState } from "./actions";
 import { FrequencySelect } from "./frequency-select";
+import { QuickAddBar } from "./quick-add-bar";
 
 const initial: FormState = {};
 
-// Common household bills. Clicking one fills the name and picks a sensible
-// default frequency — the user still sets the amount and can change the
-// frequency in the dropdown before adding.
-const PRESETS: { name: string; frequency: Frequency }[] = [
-  { name: "Huur / Lening", frequency: "monthly" },
-  { name: "Elektriciteit", frequency: "monthly" },
-  { name: "Water", frequency: "quarterly" },
-  { name: "Gas / Verwarming", frequency: "monthly" },
-  { name: "Internet / TV", frequency: "monthly" },
-  { name: "Telefoon", frequency: "monthly" },
-  { name: "Verzekering", frequency: "yearly" },
-  { name: "Boodschappen", frequency: "weekly" },
-];
-
-export function ExpenseForm() {
+/**
+ * Adds a recurring cost. A quick-add fills the name and picks its frequency —
+ * the user still sets the amount and can change the frequency in the dropdown
+ * before adding.
+ */
+export function ExpenseForm({ quickAdds }: { quickAdds: QuickAdd[] }) {
   const [state, formAction, pending] = useActionState(addExpense, initial);
   const formRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -34,31 +27,32 @@ export function ExpenseForm() {
     if (state.ok) formRef.current?.reset();
   }, [state]);
 
-  function applyPreset(preset: (typeof PRESETS)[number]) {
-    if (nameRef.current) nameRef.current.value = preset.name;
-    const select = formRef.current?.elements.namedItem("frequency");
-    if (select instanceof HTMLSelectElement) select.value = preset.frequency;
+  function frequencySelect(): HTMLSelectElement | null {
+    const el = formRef.current?.elements.namedItem("frequency");
+    return el instanceof HTMLSelectElement ? el : null;
+  }
+
+  function applyQuickAdd(item: QuickAdd) {
+    if (nameRef.current) nameRef.current.value = item.name;
+    const select = frequencySelect();
+    if (select && item.frequency) select.value = item.frequency;
     amountRef.current?.focus();
+  }
+
+  function draft() {
+    const value = frequencySelect()?.value;
+    const frequency = FREQUENCY_KEYS.find((k) => k === value);
+    return { name: nameRef.current?.value.trim() ?? "", frequency };
   }
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Snel toevoegen</p>
-        <div className="flex flex-wrap gap-2">
-          {PRESETS.map((preset) => (
-            <Button
-              key={preset.name}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => applyPreset(preset)}
-            >
-              {preset.name}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <QuickAddBar
+        kind="recurring"
+        items={quickAdds}
+        onApply={applyQuickAdd}
+        getDraft={draft}
+      />
 
       <form
         ref={formRef}

@@ -5,30 +5,34 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { MonthKey } from "@/lib/month";
+import type { QuickAdd, QuickAddKind } from "@/lib/quick-adds";
 import type { FormState } from "./actions";
+import { QuickAddBar } from "./quick-add-bar";
 
 const initial: FormState = {};
 
 /**
  * Adds a one-off entry (cost or income) to the month currently being viewed.
  *
- * Shared by both one-time sections; the server action, presets and placeholder
- * are what differ. Presets carry no frequency — a one-off belongs to a single
- * month — so a click just fills the name and drops you in the amount field. The
- * same preset can be used repeatedly (several shops a month).
+ * Shared by both one-time sections; the server action, quick-adds and
+ * placeholder are what differ. Quick-adds carry no frequency — a one-off
+ * belongs to a single month — so a click just fills the name and drops you in
+ * the amount field. The same one can be used repeatedly (several shops a month).
  *
  * `idPrefix` keeps element ids unique, since two of these forms share a page.
  */
 export function OneTimeForm({
   month,
   action,
-  presets,
+  kind,
+  quickAdds,
   placeholder,
   idPrefix,
 }: {
   month: MonthKey;
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
-  presets: string[];
+  kind: QuickAddKind;
+  quickAdds: QuickAdd[];
   placeholder: string;
   idPrefix: string;
 }) {
@@ -41,8 +45,8 @@ export function OneTimeForm({
     if (state.ok) formRef.current?.reset();
   }, [state]);
 
-  function applyPreset(name: string) {
-    if (nameRef.current) nameRef.current.value = name;
+  function applyQuickAdd(item: QuickAdd) {
+    if (nameRef.current) nameRef.current.value = item.name;
     amountRef.current?.focus();
   }
 
@@ -51,22 +55,12 @@ export function OneTimeForm({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <p className="text-xs font-medium text-muted-foreground">Snel toevoegen</p>
-        <div className="flex flex-wrap gap-2">
-          {presets.map((preset) => (
-            <Button
-              key={preset}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => applyPreset(preset)}
-            >
-              {preset}
-            </Button>
-          ))}
-        </div>
-      </div>
+      <QuickAddBar
+        kind={kind}
+        items={quickAdds}
+        onApply={applyQuickAdd}
+        getDraft={() => ({ name: nameRef.current?.value.trim() ?? "" })}
+      />
 
       <form
         ref={formRef}

@@ -5,6 +5,7 @@ import {
   expenses as expensesTable,
   oneTimeExpenses,
   oneTimeIncomes,
+  quickAdds,
   settings,
 } from "@/db/schema";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,11 @@ import { summarize, type BudgetExpense, type OneTimeEntry } from "@/lib/budget";
 import { COLLAPSE_COOKIE, parseCollapsed, type SectionId } from "@/lib/collapse";
 import { formatEUR } from "@/lib/format";
 import { formatMonth, toMonth } from "@/lib/month";
+import {
+  BUILT_IN_QUICK_ADDS,
+  type QuickAdd,
+  type QuickAddKind,
+} from "@/lib/quick-adds";
 import { requireUser } from "@/lib/session";
 import {
   addOneTimeExpense,
@@ -29,28 +35,6 @@ import { MonthNav } from "./month-nav";
 import { OneTimeSection } from "./one-time-section";
 import { ResultsPanel } from "./results-panel";
 import { ThemeToggle } from "./theme-toggle";
-
-// The everyday one-offs: logged several times a month.
-const ONE_TIME_COST_PRESETS = [
-  "Boodschappen",
-  "Drank",
-  "Tanken",
-  "Uit eten",
-  "Kleding",
-  "Cadeau",
-  "Apotheek",
-  "Herstelling",
-];
-
-// One-off income that commonly lands in a Belgian household's year.
-const ONE_TIME_INCOME_PRESETS = [
-  "Vakantiegeld",
-  "Eindejaarspremie",
-  "Bonus",
-  "Terugbetaling",
-  "Verkoop",
-  "Cadeau",
-];
 
 /** DB numeric rows -> plain entries for the budget math. */
 function toEntries(
@@ -71,7 +55,7 @@ export default async function PlannerPage({
   const collapsed = parseCollapsed((await cookies()).get(COLLAPSE_COOKIE)?.value);
   const isOpen = (id: SectionId) => !collapsed.has(id);
 
-  const [rows, settingRow, oneTimeCostRows, oneTimeIncomeRows] = await Promise.all([
+  const [rows, settingRow, oneTimeCostRows, oneTimeIncomeRows, quickAddRows] = await Promise.all([
     db
       .select()
       .from(expensesTable)
@@ -92,7 +76,24 @@ export default async function PlannerPage({
         and(eq(oneTimeIncomes.userId, userId), eq(oneTimeIncomes.month, month)),
       )
       .orderBy(asc(oneTimeIncomes.id)),
+    db
+      .select()
+      .from(quickAdds)
+      .where(eq(quickAdds.userId, userId))
+      .orderBy(asc(quickAdds.id)),
   ]);
+
+  // Built-in buttons first, then this account's own (removable) ones.
+  const quickAddsFor = (kind: QuickAddKind): QuickAdd[] => [
+    ...BUILT_IN_QUICK_ADDS[kind],
+    ...quickAddRows
+      .filter((q) => q.kind === kind)
+      .map((q) => ({
+        name: q.name,
+        frequency: q.frequency ?? undefined,
+        customId: q.id,
+      })),
+  ];
 
   const income = settingRow[0] ? Number(settingRow[0].monthlyIncome) : 0;
 
@@ -151,7 +152,8 @@ export default async function PlannerPage({
               total={summary.oneTimeTotal}
               addAction={addOneTimeExpense}
               deleteAction={deleteOneTimeExpense}
-              presets={ONE_TIME_COST_PRESETS}
+              quickAddKind="one_time_cost"
+              quickAdds={quickAddsFor("one_time_cost")}
               placeholder="bv. Boodschappen"
               idPrefix="one-time"
               variant="expense"
@@ -174,7 +176,8 @@ export default async function PlannerPage({
               total={summary.oneTimeIncomeTotal}
               addAction={addOneTimeIncome}
               deleteAction={deleteOneTimeIncome}
-              presets={ONE_TIME_INCOME_PRESETS}
+              quickAddKind="one_time_income"
+              quickAdds={quickAddsFor("one_time_income")}
               placeholder="bv. Vakantiegeld"
               idPrefix="one-time-income"
               variant="income"
@@ -190,7 +193,7 @@ export default async function PlannerPage({
             defaultOpen={isOpen("terugkerende-kosten")}
           >
             <Card className="p-6">
-              <ExpenseForm />
+              <ExpenseForm quickAdds={quickAddsFor("recurring")} />
             </Card>
 
             <Card className="overflow-hidden">

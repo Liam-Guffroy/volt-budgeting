@@ -3,6 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   expenses as expensesTable,
+  hiddenQuickAdds,
   oneTimeExpenses,
   oneTimeIncomes,
   quickAdds,
@@ -16,8 +17,8 @@ import { formatEUR } from "@/lib/format";
 import { formatMonth, toMonth } from "@/lib/month";
 import {
   BUILT_IN_QUICK_ADDS,
-  type QuickAdd,
   type QuickAddKind,
+  type QuickAddSet,
 } from "@/lib/quick-adds";
 import { requireUser } from "@/lib/session";
 import {
@@ -55,7 +56,14 @@ export default async function PlannerPage({
   const collapsed = parseCollapsed((await cookies()).get(COLLAPSE_COOKIE)?.value);
   const isOpen = (id: SectionId) => !collapsed.has(id);
 
-  const [rows, settingRow, oneTimeCostRows, oneTimeIncomeRows, quickAddRows] = await Promise.all([
+  const [
+    rows,
+    settingRow,
+    oneTimeCostRows,
+    oneTimeIncomeRows,
+    quickAddRows,
+    hiddenRows,
+  ] = await Promise.all([
     db
       .select()
       .from(expensesTable)
@@ -81,19 +89,31 @@ export default async function PlannerPage({
       .from(quickAdds)
       .where(eq(quickAdds.userId, userId))
       .orderBy(asc(quickAdds.id)),
+    db.select().from(hiddenQuickAdds).where(eq(hiddenQuickAdds.userId, userId)),
   ]);
 
-  // Built-in buttons first, then this account's own (removable) ones.
-  const quickAddsFor = (kind: QuickAddKind): QuickAdd[] => [
-    ...BUILT_IN_QUICK_ADDS[kind],
-    ...quickAddRows
-      .filter((q) => q.kind === kind)
-      .map((q) => ({
-        name: q.name,
-        frequency: q.frequency ?? undefined,
-        customId: q.id,
-      })),
-  ];
+  // Un-hidden built-ins first, then this account's own buttons; hidden
+  // built-ins are listed separately so they can be brought back.
+  const quickAddsFor = (kind: QuickAddKind): QuickAddSet => {
+    const hidden = new Set(
+      hiddenRows.filter((h) => h.kind === kind).map((h) => h.name),
+    );
+    const builtIns = BUILT_IN_QUICK_ADDS[kind];
+    return {
+      kind,
+      items: [
+        ...builtIns.filter((q) => !hidden.has(q.name)),
+        ...quickAddRows
+          .filter((q) => q.kind === kind)
+          .map((q) => ({
+            name: q.name,
+            frequency: q.frequency ?? undefined,
+            customId: q.id,
+          })),
+      ],
+      hidden: builtIns.filter((q) => hidden.has(q.name)).map((q) => q.name),
+    };
+  };
 
   const income = settingRow[0] ? Number(settingRow[0].monthlyIncome) : 0;
 
@@ -152,7 +172,6 @@ export default async function PlannerPage({
               total={summary.oneTimeTotal}
               addAction={addOneTimeExpense}
               deleteAction={deleteOneTimeExpense}
-              quickAddKind="one_time_cost"
               quickAdds={quickAddsFor("one_time_cost")}
               placeholder="bv. Boodschappen"
               idPrefix="one-time"
@@ -176,7 +195,6 @@ export default async function PlannerPage({
               total={summary.oneTimeIncomeTotal}
               addAction={addOneTimeIncome}
               deleteAction={deleteOneTimeIncome}
-              quickAddKind="one_time_income"
               quickAdds={quickAddsFor("one_time_income")}
               placeholder="bv. Vakantiegeld"
               idPrefix="one-time-income"

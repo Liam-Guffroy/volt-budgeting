@@ -5,8 +5,10 @@ import type { Frequency } from "./budget";
  * costs, its frequency) so you only type the amount.
  *
  * Every category ships with built-ins; each account can add its own on top
- * (stored in the `quick_adds` table). Built-ins live here rather than in the
- * forms so the server can refuse a custom one that duplicates them.
+ * (stored in the `quick_adds` table) and hide built-ins it never uses (stored
+ * in `hidden_quick_adds`, so they can be brought back). Built-ins live here
+ * rather than in the forms so the server can refuse a custom one that
+ * duplicates them, and only accept hiding a name that really is a built-in.
  */
 
 export const QUICK_ADD_KINDS = [
@@ -21,8 +23,17 @@ export interface QuickAdd {
   name: string;
   /** Only for recurring costs. */
   frequency?: Frequency;
-  /** Set for an account's own quick-adds — the ones that can be removed. */
+  /** Set for an account's own quick-adds (removed for good, not hidden). */
   customId?: number;
+}
+
+/** One category's buttons as an account sees them. */
+export interface QuickAddSet {
+  kind: QuickAddKind;
+  /** Visible buttons: un-hidden built-ins, then the account's own. */
+  items: QuickAdd[];
+  /** Names of built-ins this account has hidden, in built-in order. */
+  hidden: string[];
 }
 
 const names = (...list: string[]): QuickAdd[] => list.map((name) => ({ name }));

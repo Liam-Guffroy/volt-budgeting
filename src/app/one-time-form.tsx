@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { MonthKey } from "@/lib/month";
-import type { QuickAdd, QuickAddKind } from "@/lib/quick-adds";
+import type { QuickAdd, QuickAddSet } from "@/lib/quick-adds";
 import type { FormState } from "./actions";
 import { QuickAddBar } from "./quick-add-bar";
 
@@ -24,15 +24,13 @@ const initial: FormState = {};
 export function OneTimeForm({
   month,
   action,
-  kind,
   quickAdds,
   placeholder,
   idPrefix,
 }: {
   month: MonthKey;
   action: (prev: FormState, formData: FormData) => Promise<FormState>;
-  kind: QuickAddKind;
-  quickAdds: QuickAdd[];
+  quickAdds: QuickAddSet;
   placeholder: string;
   idPrefix: string;
 }) {
@@ -56,8 +54,7 @@ export function OneTimeForm({
   return (
     <div className="space-y-4">
       <QuickAddBar
-        kind={kind}
-        items={quickAdds}
+        quickAdds={quickAdds}
         onApply={applyQuickAdd}
         getDraft={() => ({ name: nameRef.current?.value.trim() ?? "" })}
       />

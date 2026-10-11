@@ -6,6 +6,7 @@ import {
   serial,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 import { FREQUENCY_KEYS } from "../lib/budget";
 import { QUICK_ADD_KINDS } from "../lib/quick-adds";
@@ -80,6 +81,22 @@ export const quickAdds = pgTable("quick_adds", {
   frequency: frequencyEnum("frequency"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
+
+// Built-in quick-add buttons an account has hidden. Deleting the row brings the
+// button back. Unique per account/category/name, so hiding twice is a no-op.
+export const hiddenQuickAdds = pgTable(
+  "hidden_quick_adds",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    kind: quickAddKindEnum("kind").notNull(),
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [unique("hidden_quick_adds_user_kind_name").on(t.userId, t.kind, t.name)],
+);
 
 // One settings row per user, keyed by userId, holding the monthly take-home income.
 export const settings = pgTable("settings", {

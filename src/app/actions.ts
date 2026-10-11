@@ -7,6 +7,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import {
   expenses,
+  hiddenQuickAdds,
   oneTimeExpenses,
   oneTimeIncomes,
   quickAdds,
@@ -64,6 +65,21 @@ const quickAddSchema = z
     message: "Kies een frequentie.",
     path: ["frequency"],
   });
+
+// Hiding only makes sense for a real built-in; restoring just needs the pair.
+const builtInSchema = z
+  .object({
+    kind: z.enum(QUICK_ADD_KINDS),
+    name: z.string(),
+  })
+  .refine((d) => BUILT_IN_QUICK_ADDS[d.kind].some((q) => q.name === d.name), {
+    message: "Onbekende snelknop.",
+  });
+
+const quickAddRefSchema = z.object({
+  kind: z.enum(QUICK_ADD_KINDS),
+  name: z.string().min(1),
+});
 
 const oneTimeSchema = z.object({
   name: z.string().trim().min(1, "Vul een naam in.").max(120),
@@ -320,16 +336,33 @@ export async function addQuickAdd(
   if (!parsed.success) return fail(parsed);
 
   const { kind, name } = parsed.data;
+  const key = quickAddKey(name);
 
-  const existing = await db
-    .select({ name: quickAdds.name })
-    .from(quickAdds)
-    .where(and(eq(quickAdds.userId, userId), eq(quickAdds.kind, kind)));
+  const [existing, hidden] = await Promise.all([
+    db
+      .select({ name: quickAdds.name })
+      .from(quickAdds)
+      .where(and(eq(quickAdds.userId, userId), eq(quickAdds.kind, kind))),
+    db
+      .select({ name: hiddenQuickAdds.name })
+      .from(hiddenQuickAdds)
+      .where(
+        and(eq(hiddenQuickAdds.userId, userId), eq(hiddenQuickAdds.kind, kind)),
+      ),
+  ]);
+
+  // A hidden built-in would otherwise just say "already exists" while being
+  // nowhere to be seen — point at the way back instead.
+  if (hidden.some((h) => quickAddKey(h.name) === key)) {
+    return {
+      error: "Die standaardknop is verborgen. Zet hem terug via “verborgen”.",
+    };
+  }
 
   const taken = new Set(
     [...BUILT_IN_QUICK_ADDS[kind], ...existing].map((q) => quickAddKey(q.name)),
   );
-  if (taken.has(quickAddKey(name))) {
+  if (taken.has(key)) {
     return { error: "Die snelknop bestaat al." };
   }
 
@@ -353,6 +386,45 @@ export async function deleteQuickAdd(formData: FormData): Promise<void> {
   await db
     .delete(quickAdds)
     .where(and(eq(quickAdds.id, id.data.id), eq(quickAdds.userId, userId)));
+  revalidatePath("/");
+}
+
+/** Hide a built-in quick-add for this account. Hiding twice is a no-op. */
+export async function hideQuickAdd(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const parsed = builtInSchema.safeParse({
+    kind: formData.get("kind"),
+    name: formData.get("name"),
+  });
+  if (!parsed.success) return;
+
+  await db
+    .insert(hiddenQuickAdds)
+    .values({ userId, kind: parsed.data.kind, name: parsed.data.name })
+    .onConflictDoNothing();
+  revalidatePath("/");
+}
+
+/** Bring a hidden built-in quick-add back. */
+export async function restoreQuickAdd(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const parsed = quickAddRefSchema.safeParse({
+    kind: formData.get("kind"),
+    name: formData.get("name"),
+  });
+  if (!parsed.success) return;
+
+  await db
+    .delete(hiddenQuickAdds)
+    .where(
+      and(
+        eq(hiddenQuickAdds.userId, userId),
+        eq(hiddenQuickAdds.kind, parsed.data.kind),
+        eq(hiddenQuickAdds.name, parsed.data.name),
+      ),
+    );
   revalidatePath("/");
 }
 

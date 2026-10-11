@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FREQUENCY_KEYS } from "@/lib/budget";
-import type { QuickAdd } from "@/lib/quick-adds";
+import type { QuickAdd, QuickAddSet } from "@/lib/quick-adds";
 import { addExpense, type FormState } from "./actions";
 import { FrequencySelect } from "./frequency-select";
 import { QuickAddBar } from "./quick-add-bar";
@@ -17,7 +17,7 @@ const initial: FormState = {};
  * the user still sets the amount and can change the frequency in the dropdown
  * before adding.
  */
-export function ExpenseForm({ quickAdds }: { quickAdds: QuickAdd[] }) {
+export function ExpenseForm({ quickAdds }: { quickAdds: QuickAddSet }) {
   const [state, formAction, pending] = useActionState(addExpense, initial);
   const formRef = useRef<HTMLFormElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -48,8 +48,7 @@ export function ExpenseForm({ quickAdds }: { quickAdds: QuickAdd[] }) {
   return (
     <div className="space-y-4">
       <QuickAddBar
-        kind="recurring"
-        items={quickAdds}
+        quickAdds={quickAdds}
         onApply={applyQuickAdd}
         getDraft={draft}
       />

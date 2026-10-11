@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import type { OneTimeEntry } from "@/lib/budget";
 import { formatEUR } from "@/lib/format";
 import type { MonthKey } from "@/lib/month";
-import type { QuickAdd, QuickAddKind } from "@/lib/quick-adds";
+import type { QuickAddSet } from "@/lib/quick-adds";
 import { cn } from "@/lib/utils";
 import type { FormState } from "./actions";
 import { OneTimeForm } from "./one-time-form";
@@ -19,7 +19,6 @@ export function OneTimeSection({
   total,
   addAction,
   deleteAction,
-  quickAddKind,
   quickAdds,
   placeholder,
   idPrefix,
@@ -33,8 +32,7 @@ export function OneTimeSection({
   total: number;
   addAction: (prev: FormState, formData: FormData) => Promise<FormState>;
   deleteAction: (formData: FormData) => Promise<void>;
-  quickAddKind: QuickAddKind;
-  quickAdds: QuickAdd[];
+  quickAdds: QuickAddSet;
   placeholder: string;
   idPrefix: string;
   variant: "expense" | "income";
@@ -47,7 +45,6 @@ export function OneTimeSection({
         <OneTimeForm
           month={month}
           action={addAction}
-          kind={quickAddKind}
           quickAdds={quickAdds}
           placeholder={placeholder}
           idPrefix={idPrefix}

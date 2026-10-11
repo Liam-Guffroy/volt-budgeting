@@ -125,6 +125,11 @@ its frequency) so you only type the amount. The built-ins live in
 per account in `quick_adds`) and remove them with their ×. A name that already
 exists in that category — built-in or custom, ignoring case — is refused.
 
+Built-ins can't be deleted, but each account can hide the ones it never uses
+(eye-slash button; stored in `hidden_quick_adds`, unique per account, category
+and name). A "n verborgen" toggle lists them, and one click puts a button back
+in its original spot.
+
 ## Where things live
 
 ```
@@ -139,7 +144,7 @@ src/
     income-form.tsx         # client form -> setIncome
     expense-form.tsx        # client form -> addExpense + quick-adds
     expense-row.tsx         # client row: inline edit + reorder + delete
-    quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen
+    quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen, hide/restore
     one-time-section.tsx    # one-off costs or income: form + month list + total
     one-time-form.tsx       # client add form + quick-adds (shared by both)
     one-time-row.tsx        # one-off cost/income row + delete
@@ -160,7 +165,7 @@ src/
     utils.ts                # cn()
   db/
     index.ts                # Drizzle client (node-postgres)
-    schema.ts               # users + expenses + one-time expenses/incomes + quick-adds + settings
+    schema.ts               # users + expenses + one-time expenses/incomes + quick-adds (own + hidden) + settings
   components/ui/            # button, input, label, card
 scripts/
   create-user.mjs           # provision/reset an account (npm run user:create)

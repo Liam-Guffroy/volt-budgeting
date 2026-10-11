@@ -1,12 +1,18 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Eye, EyeOff, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { frequencyLabel, type Frequency } from "@/lib/budget";
-import type { QuickAdd, QuickAddKind } from "@/lib/quick-adds";
-import { addQuickAdd, deleteQuickAdd, type FormState } from "./actions";
+import type { QuickAdd, QuickAddKind, QuickAddSet } from "@/lib/quick-adds";
+import {
+  addQuickAdd,
+  deleteQuickAdd,
+  hideQuickAdd,
+  restoreQuickAdd,
+  type FormState,
+} from "./actions";
 import { FrequencySelect } from "./frequency-select";
 
 /** What's currently typed in the entry form, used to prefill a new button. */
@@ -16,47 +22,41 @@ export interface QuickAddDraft {
 }
 
 /**
- * The "Snel toevoegen" row: built-in buttons, then the account's own (each
- * with an × to remove it), then "+ Eigen" to save a new one.
+ * The "Snel toevoegen" row: visible built-ins, then the account's own, then
+ * "+ Eigen" to save a new one — plus, when any built-ins are hidden, an
+ * "n verborgen" toggle that lists them for bringing back.
  *
+ * Built-ins hide (eye-slash, reversible); the account's own buttons delete (×).
  * Shared by the one-time cost, one-time income and recurring cost forms; only
  * recurring buttons carry a frequency.
  */
 export function QuickAddBar({
-  kind,
-  items,
+  quickAdds,
   onApply,
   getDraft,
 }: {
-  kind: QuickAddKind;
-  items: QuickAdd[];
+  quickAdds: QuickAddSet;
   onApply: (item: QuickAdd) => void;
   getDraft: () => QuickAddDraft;
 }) {
+  const { kind, items, hidden } = quickAdds;
   // null = the add form is closed; otherwise what to prefill it with.
   const [draft, setDraft] = useState<QuickAddDraft | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
 
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium text-muted-foreground">Snel toevoegen</p>
 
       <div className="flex flex-wrap gap-2">
-        {items.map((item) =>
-          item.customId === undefined ? (
-            <Button
-              key={`built-in-${item.name}`}
-              type="button"
-              variant="outline"
-              size="sm"
-              title={item.frequency ? frequencyLabel(item.frequency) : undefined}
-              onClick={() => onApply(item)}
-            >
-              {item.name}
-            </Button>
-          ) : (
-            <CustomChip key={`custom-${item.customId}`} item={item} onApply={onApply} />
-          ),
-        )}
+        {items.map((item) => (
+          <Chip
+            key={item.customId === undefined ? `built-in-${item.name}` : `custom-${item.customId}`}
+            kind={kind}
+            item={item}
+            onApply={onApply}
+          />
+        ))}
 
         {draft === null ? (
           <Button
@@ -70,7 +70,43 @@ export function QuickAddBar({
             Eigen
           </Button>
         ) : null}
+
+        {hidden.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            aria-expanded={showHidden}
+            onClick={() => setShowHidden(!showHidden)}
+          >
+            {showHidden ? <EyeOff /> : <Eye />}
+            {hidden.length} verborgen
+          </Button>
+        ) : null}
       </div>
+
+      {showHidden && hidden.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs text-muted-foreground">Terugzetten:</p>
+          {hidden.map((name) => (
+            <form key={name} action={restoreQuickAdd}>
+              <input type="hidden" name="kind" value={kind} />
+              <input type="hidden" name="name" value={name} />
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                className="border border-dashed border-border text-muted-foreground"
+                aria-label={`Snelknop ${name} terugzetten`}
+              >
+                <Plus />
+                {name}
+              </Button>
+            </form>
+          ))}
+        </div>
+      ) : null}
 
       {draft !== null ? (
         <AddQuickAddForm kind={kind} draft={draft} onDone={() => setDraft(null)} />
@@ -79,14 +115,21 @@ export function QuickAddBar({
   );
 }
 
-/** An account's own button: click the label to use it, × to remove it. */
-function CustomChip({
+/**
+ * One button: click the label to use it. The trailing control hides a built-in
+ * (reversible, eye-slash) or deletes an account's own button (×).
+ */
+function Chip({
+  kind,
   item,
   onApply,
 }: {
+  kind: QuickAddKind;
   item: QuickAdd;
   onApply: (item: QuickAdd) => void;
 }) {
+  const custom = item.customId !== undefined;
+
   return (
     <span className="inline-flex h-9 items-stretch rounded-lg border border-border bg-card text-sm font-medium">
       <button
@@ -97,15 +140,22 @@ function CustomChip({
       >
         {item.name}
       </button>
-      <form action={deleteQuickAdd} className="flex">
-        <input type="hidden" name="id" value={item.customId} />
+      <form action={custom ? deleteQuickAdd : hideQuickAdd} className="flex">
+        {custom ? (
+          <input type="hidden" name="id" value={item.customId} />
+        ) : (
+          <>
+            <input type="hidden" name="kind" value={kind} />
+            <input type="hidden" name="name" value={item.name} />
+          </>
+        )}
         <button
           type="submit"
-          aria-label={`Snelknop ${item.name} verwijderen`}
-          title="Verwijderen"
+          aria-label={`Snelknop ${item.name} ${custom ? "verwijderen" : "verbergen"}`}
+          title={custom ? "Verwijderen" : "Verbergen"}
           className="flex items-center rounded-r-lg pl-1 pr-2 text-muted-foreground transition-colors hover:bg-muted hover:text-[var(--color-negative)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <X className="size-3.5" />
+          {custom ? <X className="size-3.5" /> : <EyeOff className="size-3.5" />}
         </button>
       </form>
     </span>

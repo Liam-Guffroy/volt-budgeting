@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   expenses as expensesTable,
@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { summarize, type BudgetExpense, type OneTimeEntry } from "@/lib/budget";
+import { summarize, type BudgetExpense } from "@/lib/budget";
 import { COLLAPSE_COOKIE, parseCollapsed, type SectionId } from "@/lib/collapse";
 import { formatEUR } from "@/lib/format";
 import { formatMonth, toMonth } from "@/lib/month";
@@ -33,15 +33,40 @@ import { ExpenseForm } from "./expense-form";
 import { ExpenseRow } from "./expense-row";
 import { IncomeForm } from "./income-form";
 import { MonthNav } from "./month-nav";
+import type { DatedOneTimeEntry } from "./one-time-row";
 import { OneTimeSection } from "./one-time-section";
 import { ResultsPanel } from "./results-panel";
 import { ThemeToggle } from "./theme-toggle";
 
-/** DB numeric rows -> plain entries for the budget math. */
+/**
+ * Columns for a one-time list. `created_at` is a timestamp *without* time zone
+ * holding the database's clock time (UTC); node-postgres would read it back as
+ * server-local time, hours off — enough to show yesterday's date for anything
+ * entered just after midnight. So Postgres resolves it to a real instant, and
+ * ships it as epoch seconds: Drizzle returns raw SQL values as strings, and a
+ * number needs no date-string parsing to become a Date.
+ */
+function oneTimeColumns(table: typeof oneTimeExpenses | typeof oneTimeIncomes) {
+  return {
+    id: table.id,
+    name: table.name,
+    amount: table.amount,
+    addedAt: sql`extract(epoch from (${table.createdAt} at time zone current_setting('TimeZone')))`.mapWith(
+      (seconds) => new Date(Number(seconds) * 1000),
+    ),
+  };
+}
+
+/** DB numeric rows -> entries for the budget math, keeping when they were added. */
 function toEntries(
-  rows: { id: number; name: string; amount: string }[],
-): OneTimeEntry[] {
-  return rows.map((r) => ({ id: r.id, name: r.name, amount: Number(r.amount) }));
+  rows: { id: number; name: string; amount: string; addedAt: Date }[],
+): DatedOneTimeEntry[] {
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    amount: Number(r.amount),
+    addedAt: r.addedAt,
+  }));
 }
 
 export default async function PlannerPage({
@@ -71,14 +96,14 @@ export default async function PlannerPage({
       .orderBy(asc(expensesTable.position), asc(expensesTable.id)),
     db.select().from(settings).where(eq(settings.userId, userId)),
     db
-      .select()
+      .select(oneTimeColumns(oneTimeExpenses))
       .from(oneTimeExpenses)
       .where(
         and(eq(oneTimeExpenses.userId, userId), eq(oneTimeExpenses.month, month)),
       )
       .orderBy(asc(oneTimeExpenses.id)),
     db
-      .select()
+      .select(oneTimeColumns(oneTimeIncomes))
       .from(oneTimeIncomes)
       .where(
         and(eq(oneTimeIncomes.userId, userId), eq(oneTimeIncomes.month, month)),

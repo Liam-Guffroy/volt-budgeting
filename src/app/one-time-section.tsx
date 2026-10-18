@@ -1,12 +1,11 @@
 import { Card } from "@/components/ui/card";
-import type { OneTimeEntry } from "@/lib/budget";
 import { formatEUR } from "@/lib/format";
 import type { MonthKey } from "@/lib/month";
 import type { QuickAddSet } from "@/lib/quick-adds";
 import { cn } from "@/lib/utils";
 import type { FormState } from "./actions";
 import { OneTimeForm } from "./one-time-form";
-import { OneTimeRow } from "./one-time-row";
+import { OneTimeRow, type DatedOneTimeEntry } from "./one-time-row";
 
 /**
  * Body of a one-time section: add form, then the month's entries with a total.
@@ -28,7 +27,7 @@ export function OneTimeSection({
 }: {
   month: MonthKey;
   monthLabel: string;
-  entries: OneTimeEntry[];
+  entries: DatedOneTimeEntry[];
   total: number;
   addAction: (prev: FormState, formData: FormData) => Promise<FormState>;
   deleteAction: (formData: FormData) => Promise<void>;

@@ -1,20 +1,24 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { OneTimeEntry } from "@/lib/budget";
-import { formatEUR } from "@/lib/format";
+import { formatEUR, formatShortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+/** A one-off entry plus when it was added — the date is display-only. */
+export type DatedOneTimeEntry = OneTimeEntry & { addedAt: Date };
 
 /**
  * One-off cost or income row. Server component — delete is a plain form
  * action. Income is shown with a leading "+" in the positive colour so the two
- * lists can't be confused at a glance.
+ * lists can't be confused at a glance. The small date under the name is when
+ * the entry was added.
  */
 export function OneTimeRow({
   entry,
   deleteAction,
   variant,
 }: {
-  entry: OneTimeEntry;
+  entry: DatedOneTimeEntry;
   deleteAction: (formData: FormData) => Promise<void>;
   variant: "expense" | "income";
 }) {
@@ -22,7 +26,14 @@ export function OneTimeRow({
 
   return (
     <li className="flex items-center gap-3 px-4 py-3">
-      <p className="min-w-0 flex-1 truncate font-medium">{entry.name}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium">{entry.name}</p>
+        <p className="text-xs text-muted-foreground">
+          <time dateTime={entry.addedAt.toISOString()} title="Toegevoegd op">
+            {formatShortDate(entry.addedAt)}
+          </time>
+        </p>
+      </div>
 
       <p
         className={cn(

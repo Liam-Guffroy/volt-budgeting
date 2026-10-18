@@ -108,6 +108,13 @@ Month keys are plain strings and all arithmetic is integer math
 (`src/lib/month.ts`) — nothing can drift across a timezone boundary into the
 wrong month. An invalid or missing `?month=` falls back to the current month.
 
+Each one-time entry shows the date it was added ("19 okt", with the year when
+it isn't this year). Note that the `created_at` columns are `timestamp`
+*without* time zone and hold the database's UTC clock time; read naively,
+node-postgres treats them as server-local time and dates shift by hours. The
+planner has Postgres resolve them to an instant first (see `oneTimeColumns` in
+`page.tsx`) and formats in Belgian time — do the same for any new date display.
+
 ## Collapsible sections
 
 Every planner section folds away to its header line, which keeps showing the
@@ -147,7 +154,7 @@ src/
     quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen, hide/restore
     one-time-section.tsx    # one-off costs or income: form + month list + total
     one-time-form.tsx       # client add form + quick-adds (shared by both)
-    one-time-row.tsx        # one-off cost/income row + delete
+    one-time-row.tsx        # one-off cost/income row + added-on date + delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
     login/
@@ -161,7 +168,7 @@ src/
     month.ts                # "YYYY-MM" keys: parse, shift, format (nl-BE)
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     quick-adds.ts           # built-in quick-add buttons per category
-    format.ts               # nl-BE euro
+    format.ts               # nl-BE euro + short dates in Belgian time
     utils.ts                # cn()
   db/
     index.ts                # Drizzle client (node-postgres)

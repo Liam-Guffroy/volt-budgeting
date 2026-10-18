@@ -1,6 +1,6 @@
 import { Card } from "@/components/ui/card";
 import { formatEUR } from "@/lib/format";
-import type { MonthKey } from "@/lib/month";
+import { defaultDayFor, monthBounds, type MonthKey } from "@/lib/month";
 import type { QuickAddSet } from "@/lib/quick-adds";
 import { cn } from "@/lib/utils";
 import type { FormState } from "./actions";
@@ -38,11 +38,13 @@ export function OneTimeSection({
   emptyText: string;
   totalLabel: string;
 }) {
+  const { first, last } = monthBounds(month);
+
   return (
     <>
       <Card className="p-6">
         <OneTimeForm
-          month={month}
+          dates={{ default: defaultDayFor(month), min: first, max: last }}
           action={addAction}
           quickAdds={quickAdds}
           placeholder={placeholder}

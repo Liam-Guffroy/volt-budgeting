@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   expenses as expensesTable,
@@ -9,7 +9,6 @@ import {
   quickAdds,
   settings,
 } from "@/db/schema";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { summarize, type BudgetExpense } from "@/lib/budget";
 import { COLLAPSE_COOKIE, parseCollapsed, type SectionId } from "@/lib/collapse";
@@ -26,8 +25,8 @@ import {
   addOneTimeIncome,
   deleteOneTimeExpense,
   deleteOneTimeIncome,
-  logout,
 } from "./actions";
+import { AppHeader } from "./app-header";
 import { Collapsible } from "./collapsible";
 import { ExpenseForm } from "./expense-form";
 import { ExpenseRow } from "./expense-row";
@@ -36,36 +35,16 @@ import { MonthNav } from "./month-nav";
 import type { DatedOneTimeEntry } from "./one-time-row";
 import { OneTimeSection } from "./one-time-section";
 import { ResultsPanel } from "./results-panel";
-import { ThemeToggle } from "./theme-toggle";
 
-/**
- * Columns for a one-time list. `created_at` is a timestamp *without* time zone
- * holding the database's clock time (UTC); node-postgres would read it back as
- * server-local time, hours off — enough to show yesterday's date for anything
- * entered just after midnight. So Postgres resolves it to a real instant, and
- * ships it as epoch seconds: Drizzle returns raw SQL values as strings, and a
- * number needs no date-string parsing to become a Date.
- */
-function oneTimeColumns(table: typeof oneTimeExpenses | typeof oneTimeIncomes) {
-  return {
-    id: table.id,
-    name: table.name,
-    amount: table.amount,
-    addedAt: sql`extract(epoch from (${table.createdAt} at time zone current_setting('TimeZone')))`.mapWith(
-      (seconds) => new Date(Number(seconds) * 1000),
-    ),
-  };
-}
-
-/** DB numeric rows -> entries for the budget math, keeping when they were added. */
+/** DB numeric rows -> entries for the budget math, keeping their day. */
 function toEntries(
-  rows: { id: number; name: string; amount: string; addedAt: Date }[],
+  rows: { id: number; name: string; amount: string; entryDate: string }[],
 ): DatedOneTimeEntry[] {
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     amount: Number(r.amount),
-    addedAt: r.addedAt,
+    date: r.entryDate,
   }));
 }
 
@@ -96,19 +75,19 @@ export default async function PlannerPage({
       .orderBy(asc(expensesTable.position), asc(expensesTable.id)),
     db.select().from(settings).where(eq(settings.userId, userId)),
     db
-      .select(oneTimeColumns(oneTimeExpenses))
+      .select()
       .from(oneTimeExpenses)
       .where(
         and(eq(oneTimeExpenses.userId, userId), eq(oneTimeExpenses.month, month)),
       )
-      .orderBy(asc(oneTimeExpenses.id)),
+      .orderBy(asc(oneTimeExpenses.entryDate), asc(oneTimeExpenses.id)),
     db
-      .select(oneTimeColumns(oneTimeIncomes))
+      .select()
       .from(oneTimeIncomes)
       .where(
         and(eq(oneTimeIncomes.userId, userId), eq(oneTimeIncomes.month, month)),
       )
-      .orderBy(asc(oneTimeIncomes.id)),
+      .orderBy(asc(oneTimeIncomes.entryDate), asc(oneTimeIncomes.id)),
     db
       .select()
       .from(quickAdds)
@@ -157,22 +136,7 @@ export default async function PlannerPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <header className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-primary">Vlot</h1>
-          <p className="text-sm text-muted-foreground">
-            Wat houd je over, en hoeveel zet je opzij?
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <ThemeToggle />
-          <form action={logout}>
-            <Button type="submit" variant="ghost" size="sm">
-              Uitloggen
-            </Button>
-          </form>
-        </div>
-      </header>
+      <AppHeader active="planner" />
 
       <div className="mb-8 flex justify-center sm:justify-start">
         <MonthNav month={month} />

@@ -1,3 +1,5 @@
+import { todayKey, type DayKey } from "./month";
+
 // Belgian euro formatting — "€ 1.234,56".
 const eur = new Intl.NumberFormat("nl-BE", {
   style: "currency",
@@ -8,28 +10,24 @@ export function formatEUR(amount: number): string {
   return eur.format(amount);
 }
 
-// Short dates — "19 okt", or "19 okt 2025" outside the current year. Pinned to
-// Belgian time so the day is right wherever the server runs; the caller must
-// pass a real instant (see the created_at conversion in page.tsx).
-const TIME_ZONE = "Europe/Brussels";
-const shortDate = new Intl.DateTimeFormat("nl-BE", {
+// Short days — "19 okt", or "19 okt 2025" outside the current year. A day key
+// is a calendar day, not an instant, so it's rendered at UTC midnight with a
+// UTC formatter: nothing can shift it to a neighbouring day.
+const shortDay = new Intl.DateTimeFormat("nl-BE", {
   day: "numeric",
   month: "short",
-  timeZone: TIME_ZONE,
+  timeZone: "UTC",
 });
-const shortDateWithYear = new Intl.DateTimeFormat("nl-BE", {
+const shortDayWithYear = new Intl.DateTimeFormat("nl-BE", {
   day: "numeric",
   month: "short",
   year: "numeric",
-  timeZone: TIME_ZONE,
-});
-const yearOnly = new Intl.DateTimeFormat("nl-BE", {
-  year: "numeric",
-  timeZone: TIME_ZONE,
+  timeZone: "UTC",
 });
 
-export function formatShortDate(date: Date, now: Date = new Date()): string {
-  return yearOnly.format(date) === yearOnly.format(now)
-    ? shortDate.format(date)
-    : shortDateWithYear.format(date);
+export function formatDay(day: DayKey, today: DayKey = todayKey()): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  return day.slice(0, 4) === today.slice(0, 4)
+    ? shortDay.format(date)
+    : shortDayWithYear.format(date);
 }

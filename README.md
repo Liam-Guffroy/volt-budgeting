@@ -108,12 +108,33 @@ Month keys are plain strings and all arithmetic is integer math
 (`src/lib/month.ts`) — nothing can drift across a timezone boundary into the
 wrong month. An invalid or missing `?month=` falls back to the current month.
 
-Each one-time entry shows the date it was added ("19 okt", with the year when
-it isn't this year). Note that the `created_at` columns are `timestamp`
-*without* time zone and hold the database's UTC clock time; read naively,
-node-postgres treats them as server-local time and dates shift by hours. The
-planner has Postgres resolve them to an instant first (see `oneTimeColumns` in
-`page.tsx`) and formats in Belgian time — do the same for any new date display.
+Each one-time entry has a date (`entry_date`, a plain calendar day) and the
+date decides its month — `month` is derived from it on insert. The form's date
+field starts on today (Belgian time) and is limited to the month being viewed;
+in another month it starts on the nearest day of it (the last day of a past
+month), so an entry can't vanish into a month you aren't looking at. Lists
+sort by date, and each row shows it ("19 okt", with the year when it isn't
+this year).
+
+Careful with the `created_at` columns: they're `timestamp` *without* time zone
+holding the database's UTC clock time, and node-postgres reads them as
+server-local time — hours off. Resolve them in SQL first (`created_at at time
+zone current_setting('TimeZone')`), as the statistics page does.
+
+## Statistieken
+
+`/statistieken` summarises a period (6 months, 12 months or this year): four
+stat tiles, "over per maand" as columns above/below zero, one-time costs per
+month, where one-time costs go (grouped by name, case-insensitive, folding the
+tail into "Overige") and recurring costs as monthly amounts. The math is pure,
+in `src/lib/stats.ts`. Two honest limits, also stated on the page: past months
+use today's income and recurring costs (there's no history of those), and a
+period never starts before the account's first month.
+
+Charts are server-rendered HTML — no chart library. Fills use the
+`--color-chart-*` tokens in `globals.css`, chosen per theme and checked for
+lightness, chroma, colour-blind separation and contrast on the card surface;
+every chart has a "Bekijk als tabel" view and a hover/keyboard tooltip.
 
 ## Collapsible sections
 
@@ -137,6 +158,11 @@ Built-ins can't be deleted, but each account can hide the ones it never uses
 and name). A "n verborgen" toggle lists them, and one click puts a button back
 in its original spot.
 
+That uniqueness is a unique *index*, deliberately not a unique constraint:
+drizzle-kit reads constraint columns back in an arbitrary order, decides the
+constraint changed, and `db:push` then offers to **truncate** the table. Prefer
+`uniqueIndex()` for multi-column uniqueness in this schema.
+
 ## Where things live
 
 ```
@@ -145,6 +171,7 @@ src/
     layout.tsx              # root shell + globals.css + no-flash theme script
     page.tsx                # planner: requireUser(), reads this user's data, composes UI
     actions.ts             # setIncome / addExpense / updateExpense / deleteExpense / logout (Zod, userId-scoped)
+    app-header.tsx          # title + page nav (Planner / Statistieken) + theme + logout
     theme-toggle.tsx        # client light/dark toggle
     month-nav.tsx           # prev/next month links (?month=YYYY-MM)
     collapsible.tsx         # client fold-away section header (state in a cookie)
@@ -153,10 +180,14 @@ src/
     expense-row.tsx         # client row: inline edit + reorder + delete
     quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen, hide/restore
     one-time-section.tsx    # one-off costs or income: form + month list + total
-    one-time-form.tsx       # client add form + quick-adds (shared by both)
-    one-time-row.tsx        # one-off cost/income row + added-on date + delete
+    one-time-form.tsx       # client add form (name, amount, date) + quick-adds (shared by both)
+    one-time-row.tsx        # one-off cost/income row + date + delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
+    statistieken/
+      page.tsx              # period filter, stat tiles, charts, category lists
+      column-chart.tsx      # server-rendered columns (single / diverging) + table view
+      bar-list.tsx          # ranked horizontal bars with value + share
     login/
       page.tsx              # password-only gate
       login-form.tsx        # client form -> login action
@@ -165,10 +196,11 @@ src/
     session.ts              # cookie sign/verify (carries userId), requireUser()
     password.ts             # scrypt hash/verify for stored account passwords
     budget.ts               # frequency config + pure normalization/summarize
-    month.ts                # "YYYY-MM" keys: parse, shift, format (nl-BE)
+    month.ts                # month + day keys, Belgian "today", month bounds, default day
+    stats.ts                # pure statistics math: periods, month series, categories, scale
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     quick-adds.ts           # built-in quick-add buttons per category
-    format.ts               # nl-BE euro + short dates in Belgian time
+    format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()
   db/
     index.ts                # Drizzle client (node-postgres)

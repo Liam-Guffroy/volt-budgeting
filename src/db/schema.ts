@@ -1,4 +1,5 @@
 import {
+  date,
   integer,
   numeric,
   pgEnum,
@@ -6,7 +7,7 @@ import {
   serial,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { FREQUENCY_KEYS } from "../lib/budget";
 import { QUICK_ADD_KINDS } from "../lib/quick-adds";
@@ -40,30 +41,32 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// One-off costs filed against a specific month ("YYYY-MM"), e.g. a new washing
-// machine in March. Unlike `expenses` these don't recur, so they only affect
-// the month they're filed under — which is what makes browsing past months
-// meaningful.
+// One-off costs on a specific day, e.g. a new washing machine on 3 March.
+// Unlike `expenses` these don't recur, so they only affect their own month —
+// which is what makes browsing past months meaningful. `month` is always
+// `entryDate`'s "YYYY-MM" (set together on insert) and is what lists query by.
 export const oneTimeExpenses = pgTable("one_time_expenses", {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   month: text("month").notNull(),
+  entryDate: date("entry_date", { mode: "string" }).notNull(),
   name: text("name").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
-// One-off income filed against a specific month ("YYYY-MM"), e.g. holiday pay
-// in June or a refund. The mirror image of `oneTimeExpenses`: it only lifts the
-// month it belongs to, on top of the regular monthly income in `settings`.
+// One-off income on a specific day, e.g. holiday pay in June or a refund. The
+// mirror image of `oneTimeExpenses`: it only lifts its own month, on top of the
+// regular monthly income in `settings`. Same month/entryDate pairing.
 export const oneTimeIncomes = pgTable("one_time_incomes", {
   id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   month: text("month").notNull(),
+  entryDate: date("entry_date", { mode: "string" }).notNull(),
   name: text("name").notNull(),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -84,6 +87,12 @@ export const quickAdds = pgTable("quick_adds", {
 
 // Built-in quick-add buttons an account has hidden. Deleting the row brings the
 // button back. Unique per account/category/name, so hiding twice is a no-op.
+//
+// A unique *index*, not a unique constraint: drizzle-kit introspects
+// constraint columns with an unordered query, reads them back in a different
+// order than declared, and then `db:push` wants to drop and re-add the
+// constraint — offering to TRUNCATE the table. Index columns are introspected
+// in order, so pushes stay clean.
 export const hiddenQuickAdds = pgTable(
   "hidden_quick_adds",
   {
@@ -95,7 +104,9 @@ export const hiddenQuickAdds = pgTable(
     name: text("name").notNull(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
-  (t) => [unique("hidden_quick_adds_user_kind_name").on(t.userId, t.kind, t.name)],
+  (t) => [
+    uniqueIndex("hidden_quick_adds_user_kind_name").on(t.userId, t.kind, t.name),
+  ],
 );
 
 // One settings row per user, keyed by userId, holding the monthly take-home income.

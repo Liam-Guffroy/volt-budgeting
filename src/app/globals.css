@@ -20,6 +20,13 @@
   --color-positive: #0d9488;
   --color-negative: #dc2626;
 
+  /* Chart fills (statistieken). Separate from the text tokens above: marks need
+     their own steps per theme. Validated with the dataviz palette checks
+     (lightness band, chroma, colour-blind separation, contrast) on the card
+     surface in both themes — re-run them before changing these. */
+  --color-chart-up: #0d9488;
+  --color-chart-down: #dc2626;
+
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
 }
@@ -44,6 +51,11 @@
 
   --color-positive: #2dd4bf;
   --color-negative: #f87171;
+
+  /* Dark chart steps are chosen, not flipped: the text tokens above are too
+     light to pass the dark-mode lightness band as fills. */
+  --color-chart-up: #0d9488;
+  --color-chart-down: #ef4444;
 
   color-scheme: dark;
 }

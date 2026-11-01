@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, type AnyColumn } from "drizzle-orm";
 import { db } from "@/db";
 import {
   expenses as expensesTable,
@@ -12,6 +12,12 @@ import {
 import { Card } from "@/components/ui/card";
 import { summarize, type BudgetExpense } from "@/lib/budget";
 import { COLLAPSE_COOKIE, parseCollapsed, type SectionId } from "@/lib/collapse";
+import {
+  SORT_COOKIE,
+  parseOldestFirst,
+  type ListSort,
+  type SortableList,
+} from "@/lib/list-sort";
 import { formatEUR } from "@/lib/format";
 import { formatMonth, toMonth } from "@/lib/month";
 import {
@@ -57,8 +63,17 @@ export default async function PlannerPage({
   const month = toMonth((await searchParams).month);
   const monthLabel = formatMonth(month);
 
-  const collapsed = parseCollapsed((await cookies()).get(COLLAPSE_COOKIE)?.value);
+  const cookieStore = await cookies();
+  const collapsed = parseCollapsed(cookieStore.get(COLLAPSE_COOKIE)?.value);
   const isOpen = (id: SectionId) => !collapsed.has(id);
+
+  // Newest first unless this browser switched the list to oldest first. The
+  // id tie-break keeps same-day entries in the order they were added.
+  const oldestFirst = parseOldestFirst(cookieStore.get(SORT_COOKIE)?.value);
+  const sortFor = (list: SortableList): ListSort =>
+    oldestFirst.has(list) ? "oldest" : "newest";
+  const byDate = (list: SortableList, date: AnyColumn, id: AnyColumn) =>
+    sortFor(list) === "oldest" ? [asc(date), asc(id)] : [desc(date), desc(id)];
 
   const [
     rows,
@@ -80,14 +95,18 @@ export default async function PlannerPage({
       .where(
         and(eq(oneTimeExpenses.userId, userId), eq(oneTimeExpenses.month, month)),
       )
-      .orderBy(asc(oneTimeExpenses.entryDate), asc(oneTimeExpenses.id)),
+      .orderBy(
+        ...byDate("eenmalige-kosten", oneTimeExpenses.entryDate, oneTimeExpenses.id),
+      ),
     db
       .select()
       .from(oneTimeIncomes)
       .where(
         and(eq(oneTimeIncomes.userId, userId), eq(oneTimeIncomes.month, month)),
       )
-      .orderBy(asc(oneTimeIncomes.entryDate), asc(oneTimeIncomes.id)),
+      .orderBy(
+        ...byDate("eenmalige-inkomsten", oneTimeIncomes.entryDate, oneTimeIncomes.id),
+      ),
     db
       .select()
       .from(quickAdds)
@@ -161,6 +180,8 @@ export default async function PlannerPage({
               total={summary.oneTimeTotal}
               addAction={addOneTimeExpense}
               deleteAction={deleteOneTimeExpense}
+              listId="eenmalige-kosten"
+              sort={sortFor("eenmalige-kosten")}
               quickAdds={quickAddsFor("one_time_cost")}
               placeholder="bv. Boodschappen"
               idPrefix="one-time"
@@ -184,6 +205,8 @@ export default async function PlannerPage({
               total={summary.oneTimeIncomeTotal}
               addAction={addOneTimeIncome}
               deleteAction={deleteOneTimeIncome}
+              listId="eenmalige-inkomsten"
+              sort={sortFor("eenmalige-inkomsten")}
               quickAdds={quickAddsFor("one_time_income")}
               placeholder="bv. Vakantiegeld"
               idPrefix="one-time-income"

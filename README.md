@@ -37,6 +37,16 @@ npm run user:create -- "Liam" "a-strong-password"   # add an account
 npm run dev                     # http://localhost:3000
 ```
 
+For everyday use, run the production build instead:
+
+```bash
+npm run build && npm start
+```
+
+`npm run dev` compiles each server action the first time it's used, which
+makes the page fully reload after the first save on a freshly loaded page
+(the entry is still saved). The production build doesn't do that.
+
 On Windows without `openssl` on PATH, generate `APP_SECRET` with PowerShell
 (uses the cryptographic RNG, not the non-secure `Get-Random`):
 
@@ -112,9 +122,14 @@ Each one-time entry has a date (`entry_date`, a plain calendar day) and the
 date decides its month — `month` is derived from it on insert. The form's date
 field starts on today (Belgian time) and is limited to the month being viewed;
 in another month it starts on the nearest day of it (the last day of a past
-month), so an entry can't vanish into a month you aren't looking at. Lists
-sort by date, and each row shows it ("19 okt", with the year when it isn't
-this year).
+month), so an entry can't vanish into a month you aren't looking at. Each row
+shows its date ("19 okt", with the year when it isn't this year).
+
+Both one-time lists sort newest first by default (same-day entries: latest
+added first); each list has a "Nieuwste eerst / Oudste eerst" choice once it
+holds two or more entries. The choice is remembered per browser in a
+`vlot_oldest_first` cookie the server reads, so the list renders in that order
+from the start (`src/lib/list-sort.ts`).
 
 Careful with the `created_at` columns: they're `timestamp` *without* time zone
 holding the database's UTC clock time, and node-postgres reads them as
@@ -199,6 +214,7 @@ src/
     month.ts                # month + day keys, Belgian "today", month bounds, default day
     stats.ts                # pure statistics math: periods, month series, categories, scale
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
+    list-sort.ts            # newest/oldest-first cookie for the one-time lists
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()

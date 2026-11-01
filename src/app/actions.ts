@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -14,6 +15,12 @@ import {
   settings,
 } from "@/db/schema";
 import { FREQUENCY_KEYS } from "@/lib/budget";
+import {
+  SORT_COOKIE,
+  isSortableList,
+  parseOldestFirst,
+  serializeOldestFirst,
+} from "@/lib/list-sort";
 import { isDayKey } from "@/lib/month";
 import {
   BUILT_IN_QUICK_ADDS,
@@ -430,6 +437,30 @@ export async function restoreQuickAdd(formData: FormData): Promise<void> {
         eq(hiddenQuickAdds.name, parsed.data.name),
       ),
     );
+  revalidatePath("/");
+}
+
+/**
+ * Choose newest-first or oldest-first for one dated list, remembered in a
+ * cookie. Sets an explicit order (not a toggle), so a double click is harmless.
+ */
+export async function setListSort(formData: FormData): Promise<void> {
+  await requireUser();
+
+  const list = formData.get("list");
+  const order = formData.get("order");
+  if (!isSortableList(list) || (order !== "newest" && order !== "oldest")) return;
+
+  const store = await cookies();
+  const oldestFirst = parseOldestFirst(store.get(SORT_COOKIE)?.value);
+  if (order === "oldest") oldestFirst.add(list);
+  else oldestFirst.delete(list);
+
+  store.set(SORT_COOKIE, serializeOldestFirst(oldestFirst), {
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+    sameSite: "lax",
+  });
   revalidatePath("/");
 }
 

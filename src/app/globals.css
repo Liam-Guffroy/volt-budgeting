@@ -27,6 +27,14 @@
   --color-chart-up: #0d9488;
   --color-chart-down: #dc2626;
 
+  /* The four parts of the "where did the money go" bar, in stack order:
+     fixed costs, set-asides, one-time costs, left over. Validated as an
+     adjacent set; changing the order or a step means re-running the checks. */
+  --color-chart-1: #2a78d6;
+  --color-chart-2: #eb6834;
+  --color-chart-3: #6250d6;
+  --color-chart-4: #0d9488;
+
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
 }
@@ -56,6 +64,11 @@
      light to pass the dark-mode lightness band as fills. */
   --color-chart-up: #0d9488;
   --color-chart-down: #ef4444;
+
+  --color-chart-1: #3987e5;
+  --color-chart-2: #d95926;
+  --color-chart-3: #9085e9;
+  --color-chart-4: #0d9488;
 
   color-scheme: dark;
 }

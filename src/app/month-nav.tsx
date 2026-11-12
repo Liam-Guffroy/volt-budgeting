@@ -6,15 +6,22 @@ import { cn } from "@/lib/utils";
 
 /**
  * Month switcher. Plain links (not client state) so each month is a real URL —
- * shareable, bookmarkable, and back/forward works.
+ * shareable, bookmarkable, and back/forward works. `basePath` is the page the
+ * links stay on ("/" for the planner, "/statistieken" for the statistics).
  */
-export function MonthNav({ month }: { month: MonthKey }) {
+export function MonthNav({
+  month,
+  basePath = "/",
+}: {
+  month: MonthKey;
+  basePath?: string;
+}) {
   const isCurrent = month === currentMonth();
 
   return (
     <div className="flex items-center gap-2">
       <Link
-        href={`/?month=${shiftMonth(month, -1)}`}
+        href={`${basePath}?month=${shiftMonth(month, -1)}`}
         aria-label="Vorige maand"
         className={cn(buttonVariants({ variant: "outline", size: "icon" }))}
       >
@@ -26,7 +33,7 @@ export function MonthNav({ month }: { month: MonthKey }) {
       </p>
 
       <Link
-        href={`/?month=${shiftMonth(month, 1)}`}
+        href={`${basePath}?month=${shiftMonth(month, 1)}`}
         aria-label="Volgende maand"
         className={cn(buttonVariants({ variant: "outline", size: "icon" }))}
       >
@@ -35,7 +42,7 @@ export function MonthNav({ month }: { month: MonthKey }) {
 
       {isCurrent ? null : (
         <Link
-          href="/"
+          href={basePath}
           className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}
         >
           Deze maand

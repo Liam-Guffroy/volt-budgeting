@@ -138,18 +138,33 @@ zone current_setting('TimeZone')`), as the statistics page does.
 
 ## Statistieken
 
-`/statistieken` summarises a period (6 months, 12 months or this year): four
-stat tiles, "over per maand" as columns above/below zero, one-time costs per
-month, where one-time costs go (grouped by name, case-insensitive, folding the
-tail into "Overige") and recurring costs as monthly amounts. The math is pure,
-in `src/lib/stats.ts`. Two honest limits, also stated on the page: past months
-use today's income and recurring costs (there's no history of those), and a
-period never starts before the account's first month.
+`/statistieken?month=YYYY-MM` looks at one month at a time, with the same month
+switcher as the planner:
 
-Charts are server-rendered HTML — no chart library. Fills use the
+- **Where the money went** — the month's income as one segmented bar: fixed
+  costs, set-asides, one-time costs and what's left. When costs exceed income
+  the bar spans the costs and a marker shows where the income ran out.
+- **Four tiles** — one-time spending (against the month before *at the same
+  day*, so a month in progress is compared fairly), average per day, what's
+  still free per day, and the largest expense.
+- **Spending through the month** — the running total of one-time costs per
+  day against the month before, with a crosshair tooltip (pointer, touch and
+  arrow keys).
+- **Where it went** — one-time costs grouped by name (case-insensitive, tail
+  folded into "Overige"), each with the month before alongside.
+- **Per month** — up to six months of one-time costs; a column opens its month.
+  Never starts before the account's first month.
+- Largest expenses and recurring costs as monthly amounts.
+
+The math is pure, in `src/lib/stats.ts`. One honest limit, stated on the page:
+every month uses today's income and recurring costs — there's no history of
+those.
+
+No chart library: the charts are HTML and a little SVG. Fills use the
 `--color-chart-*` tokens in `globals.css`, chosen per theme and checked for
-lightness, chroma, colour-blind separation and contrast on the card surface;
-every chart has a "Bekijk als tabel" view and a hover/keyboard tooltip.
+lightness, chroma, colour-blind separation and contrast on the card surface —
+`--color-chart-1..4` are validated *in that order*, so re-run the checks before
+reordering or changing one.
 
 ## Collapsible sections
 
@@ -200,9 +215,11 @@ src/
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
     statistieken/
-      page.tsx              # period filter, stat tiles, charts, category lists
-      column-chart.tsx      # server-rendered columns (single / diverging) + table view
-      bar-list.tsx          # ranked horizontal bars with value + share
+      page.tsx              # one month: queries, figures, layout
+      money-bar.tsx         # income split into fixed / set-aside / one-time / left
+      spending-chart.tsx    # client line chart: running total vs the month before
+      month-columns.tsx     # one-time costs per month; columns link to their month
+      bar-list.tsx          # ranked bars with amount, share and last month's figure
     login/
       page.tsx              # password-only gate
       login-form.tsx        # client form -> login action
@@ -212,7 +229,7 @@ src/
     password.ts             # scrypt hash/verify for stored account passwords
     budget.ts               # frequency config + pure normalization/summarize
     month.ts                # month + day keys, Belgian "today", month bounds, default day
-    stats.ts                # pure statistics math: periods, month series, categories, scale
+    stats.ts                # pure statistics math: running totals, categories, trend months, scale
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     list-sort.ts            # newest/oldest-first cookie for the one-time lists
     quick-adds.ts           # built-in quick-add buttons per category

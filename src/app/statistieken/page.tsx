@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
+import { TrendingDown, TrendingUp } from "lucide-react";
 import { db } from "@/db";
 import {
   expenses as expensesTable,
@@ -8,64 +8,74 @@ import {
   settings,
   users,
 } from "@/db/schema";
-import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import type { BudgetExpense } from "@/lib/budget";
-import { formatEUR } from "@/lib/format";
-import { currentMonth, formatMonth, type MonthKey } from "@/lib/month";
+import { summarize, type BudgetExpense } from "@/lib/budget";
+import { formatDay, formatEUR } from "@/lib/format";
+import {
+  daysIn,
+  formatMonth,
+  shiftMonth,
+  todayKey,
+  toMonth,
+  type MonthKey,
+} from "@/lib/month";
 import { requireUser } from "@/lib/session";
 import {
-  PERIODS,
-  monthSeries,
-  periodMonths,
-  periodStart,
+  cumulativeByDay,
+  dayOf,
+  inMonth,
+  largest,
   recurringBreakdown,
-  toPeriod,
   topCategories,
-  type MonthEntry,
-  type MonthStat,
+  totalOf,
+  trendMonths,
+  type DatedEntry,
 } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "../app-header";
+import { MonthNav } from "../month-nav";
 import { BarList } from "./bar-list";
-import { ColumnChart, type Column } from "./column-chart";
+import { MoneyBar, type MoneyPart } from "./money-bar";
+import { MonthColumns } from "./month-columns";
+import { SpendingChart } from "./spending-chart";
 
 export const metadata = { title: "Statistieken — Vlot" };
 
+const longMonth = new Intl.DateTimeFormat("nl-BE", { month: "long", timeZone: "UTC" });
 const shortMonth = new Intl.DateTimeFormat("nl-BE", { month: "short", timeZone: "UTC" });
+const monthDate = (month: MonthKey) => {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1));
+};
 
-function columnsFor(stats: MonthStat[], valueOf: (s: MonthStat) => number): Column[] {
-  return stats.map((s, i) => {
-    const [y, m] = s.month.split("-").map(Number);
-    return {
-      key: s.month,
-      label: shortMonth.format(new Date(Date.UTC(y, m - 1, 1))),
-      // The year under the first column and every January, so a period that
-      // crosses New Year reads unambiguously.
-      sublabel: i === 0 || m === 1 ? String(y) : undefined,
-      fullLabel: formatMonth(s.month),
-      value: valueOf(s),
-    };
-  });
+function toEntries(rows: { entryDate: string; name: string; amount: string }[]): DatedEntry[] {
+  return rows.map((r) => ({ date: r.entryDate, name: r.name, amount: Number(r.amount) }));
 }
 
-/** Month entries for the budget math: numeric amounts. */
-function toMonthEntries(rows: { month: string; name: string; amount: string }[]): MonthEntry[] {
-  return rows.map((r) => ({ month: r.month, name: r.name, amount: Number(r.amount) }));
-}
+/** The budget math wants ids; statistics don't have a use for them. */
+const withIds = (entries: DatedEntry[]) =>
+  entries.map((e, id) => ({ id, name: e.name, amount: e.amount }));
 
 export default async function StatisticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ periode?: string }>;
+  searchParams: Promise<{ month?: string }>;
 }) {
   const userId = await requireUser();
-  const period = toPeriod((await searchParams).periode);
-  const current = currentMonth();
-  const start = periodStart(period, current);
+  const month = toMonth((await searchParams).month);
+  const prev = shiftMonth(month, -1);
+  const monthLabel = formatMonth(month);
+  const monthName = longMonth.format(monthDate(month));
+  const prevName = longMonth.format(monthDate(prev));
 
-  const inPeriod = (table: typeof oneTimeExpenses | typeof oneTimeIncomes) =>
-    and(eq(table.userId, userId), gte(table.month, start), lte(table.month, current));
+  const today = todayKey();
+  const nowMonth = today.slice(0, 7);
+  const isCurrent = month === nowMonth;
+  const days = daysIn(month);
+  const rangeStart = shiftMonth(month, -5);
+
+  const inRange = (table: typeof oneTimeExpenses | typeof oneTimeIncomes) =>
+    and(eq(table.userId, userId), gte(table.month, rangeStart), lte(table.month, month));
 
   const [account, settingRow, expenseRows, costRows, incomeRows] = await Promise.all([
     db
@@ -80,20 +90,20 @@ export default async function StatisticsPage({
     db.select().from(expensesTable).where(eq(expensesTable.userId, userId)),
     db
       .select({
-        month: oneTimeExpenses.month,
+        entryDate: oneTimeExpenses.entryDate,
         name: oneTimeExpenses.name,
         amount: oneTimeExpenses.amount,
       })
       .from(oneTimeExpenses)
-      .where(inPeriod(oneTimeExpenses)),
+      .where(inRange(oneTimeExpenses)),
     db
       .select({
-        month: oneTimeIncomes.month,
+        entryDate: oneTimeIncomes.entryDate,
         name: oneTimeIncomes.name,
         amount: oneTimeIncomes.amount,
       })
       .from(oneTimeIncomes)
-      .where(inPeriod(oneTimeIncomes)),
+      .where(inRange(oneTimeIncomes)),
   ]);
 
   const income = settingRow[0] ? Number(settingRow[0].monthlyIncome) : 0;
@@ -103,130 +113,255 @@ export default async function StatisticsPage({
     amount: Number(r.amount),
     frequency: r.frequency,
   }));
-  const costs = toMonthEntries(costRows);
-  const incomes = toMonthEntries(incomeRows);
+  const allCosts = toEntries(costRows);
+  const allIncomes = toEntries(incomeRows);
 
-  // Start at the account's first month — or an earlier entry, if one was
-  // filed back in time — so there's no made-up history before you began.
+  const costs = inMonth(allCosts, month);
+  const prevCosts = inMonth(allCosts, prev);
+  const summary = summarize(income, expenses, withIds(costs), withIds(inMonth(allIncomes, month)));
+
+  // ── Where the money went ──────────────────────────────────────────────
+  const totalIncome = income + summary.oneTimeIncomeTotal;
+  const shortfall = Math.max(-summary.remaining, 0);
+  const parts: MoneyPart[] = [
+    { key: "vast", label: "Vaste kosten", value: summary.regularTotal, color: "bg-chart-1" },
+    { key: "reserve", label: "Reserveren", value: summary.reserveTotal, color: "bg-chart-2" },
+    { key: "eenmalig", label: "Eenmalige kosten", value: summary.oneTimeTotal, color: "bg-chart-3" },
+    ...(shortfall > 0
+      ? []
+      : [{ key: "over", label: "Over", value: summary.remaining, color: "bg-chart-4" }]),
+  ];
+  const hasMoney = totalIncome > 0 || parts.some((p) => p.value > 0);
+
+  // ── Spending pace ─────────────────────────────────────────────────────
+  // How far the month has got: today for the current month (or a later entry,
+  // if one was dated ahead), the whole month for a past one.
+  const lastEntryDay = costs.reduce((d, e) => Math.max(d, dayOf(e.date)), 0);
+  const reachedDay = isCurrent
+    ? Math.max(dayOf(today), lastEntryDay)
+    : month < nowMonth
+      ? days
+      : lastEntryDay;
+  const running = cumulativeByDay(costs, days, reachedDay);
+  const prevRunning = (
+    prevCosts.length > 0 ? cumulativeByDay(prevCosts, daysIn(prev)) : []
+  ) as number[];
+
+  const spent = summary.oneTimeTotal;
+  // Fair comparison: last month at the same day, not last month's full total.
+  const prevAtSameDay =
+    prevRunning.length > 0 && reachedDay > 0
+      ? prevRunning[Math.min(reachedDay, prevRunning.length) - 1]
+      : null;
+  const paceDiff = prevAtSameDay !== null ? spent - prevAtSameDay : null;
+  const daysLeft = isCurrent ? days - dayOf(today) + 1 : 0;
+  const biggest = largest(costs, 5);
+
+  // ── Categories, trend, fixed costs ────────────────────────────────────
+  // Same fairness rule as the pace: a month in progress is compared with the
+  // month before up to the same day.
+  const prevComparable = isCurrent
+    ? prevCosts.filter((e) => dayOf(e.date) <= reachedDay)
+    : prevCosts;
+  const categories = topCategories(costs, 6, prevCosts.length > 0 ? prevComparable : undefined);
   const firstActive: MonthKey = [
-    account[0]?.createdMonth ?? current,
-    ...costs.map((c) => c.month),
-    ...incomes.map((i) => i.month),
+    account[0]?.createdMonth ?? month,
+    ...allCosts.map((c) => c.date.slice(0, 7)),
   ].sort()[0];
-  const months = periodMonths(period, current, firstActive);
-
-  const stats = monthSeries(months, income, expenses, costs, incomes);
-  const n = stats.length;
-  const totalCosts = stats.reduce((t, s) => t + s.oneTimeCosts, 0);
-  const totalIncome = stats.reduce((t, s) => t + s.oneTimeIncome, 0);
-  const avgRemaining = stats.reduce((t, s) => t + s.remaining, 0) / n;
-
-  const categories = topCategories(costs);
-  const recurring = recurringBreakdown(expenses);
-  const biggest = categories.find((c) => !c.other);
-
-  const range =
-    n === 1
-      ? formatMonth(months[0])
-      : `${formatMonth(months[0])} – ${formatMonth(months[n - 1])}`;
+  const trend = trendMonths(month, firstActive).map((m) => ({
+    month: m,
+    label: shortMonth.format(monthDate(m)),
+    fullLabel: formatMonth(m),
+    total: totalOf(inMonth(allCosts, m)),
+  }));
+  const trendAverage = trend.reduce((t, m) => t + m.total, 0) / trend.length;
+  const recurring = recurringBreakdown(expenses, 4);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <AppHeader active="statistieken" />
 
-      {/* One filter row, above everything it scopes. */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <nav aria-label="Periode" className="flex flex-wrap gap-1">
-          {PERIODS.map((p) => (
-            <Link
-              key={p.key}
-              href={`/statistieken?periode=${p.key}`}
-              aria-current={p.key === period ? "true" : undefined}
-              className={cn(
-                buttonVariants({ variant: p.key === period ? "outline" : "ghost", size: "sm" }),
-              )}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </nav>
-        <p className="text-sm text-muted-foreground">
-          {range} · {n} {n === 1 ? "maand" : "maanden"}
-        </p>
+      <div className="mb-8 flex justify-center sm:justify-start">
+        <MonthNav month={month} basePath="/statistieken" />
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
+        {/* Where the money went */}
+        <Card className="p-6">
+          <p className="text-sm text-muted-foreground">
+            {shortfall > 0 ? "Tekort" : "Over"} in {monthLabel}
+          </p>
+          <p
+            className={cn(
+              "mt-1 text-5xl font-semibold tracking-tight",
+              shortfall > 0 ? "text-[var(--color-negative)]" : "text-primary",
+            )}
+          >
+            {formatEUR(summary.remaining)}
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            van {formatEUR(totalIncome)} inkomen
+            {summary.oneTimeIncomeTotal > 0
+              ? ` (waarvan ${formatEUR(summary.oneTimeIncomeTotal)} eenmalig)`
+              : ""}
+            {shortfall > 0 ? ` — je gaf ${formatEUR(shortfall)} meer uit dan er binnenkwam` : ""}
+          </p>
+
+          <div className="mt-6">
+            {hasMoney ? (
+              <MoneyBar parts={parts} income={totalIncome} shortfall={shortfall} />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Vul je inkomen en kosten in op de planner om hier te zien waar je geld
+                naartoe gaat.
+              </p>
+            )}
+          </div>
+        </Card>
+
+        {/* Headline numbers */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <Stat
-            label="Eenmalige kosten"
-            value={formatEUR(totalCosts)}
-            note={`gem. ${formatEUR(totalCosts / n)} per maand`}
-          />
-          <Stat
-            label="Eenmalig inkomen"
-            value={formatEUR(totalIncome)}
-            note={`gem. ${formatEUR(totalIncome / n)} per maand`}
-          />
-          <Stat
-            label="Gemiddeld over per maand"
-            value={formatEUR(avgRemaining)}
-            note="na alle kosten"
-          />
-          <Stat
-            label="Grootste uitgavenpost"
-            value={biggest ? biggest.label : "—"}
-            note={biggest ? `${formatEUR(biggest.total)} · ${biggest.count}×` : "nog geen eenmalige kosten"}
-          />
+          <Tile label="Eenmalig uitgegeven" value={formatEUR(spent)}>
+            {paceDiff === null ? (
+              `${costs.length} ${costs.length === 1 ? "uitgave" : "uitgaven"}`
+            ) : Math.abs(paceDiff) < 0.005 ? (
+              `evenveel als in ${prevName}`
+            ) : (
+              <span
+                className={cn(
+                  "inline-flex items-start gap-1",
+                  paceDiff < 0 ? "text-[var(--color-positive)]" : "text-[var(--color-negative)]",
+                )}
+              >
+                {paceDiff < 0 ? (
+                  <TrendingDown aria-hidden className="mt-px size-3.5 shrink-0" />
+                ) : (
+                  <TrendingUp aria-hidden className="mt-px size-3.5 shrink-0" />
+                )}
+                {formatEUR(Math.abs(paceDiff))} {paceDiff < 0 ? "minder" : "meer"} dan{" "}
+                {isCurrent ? `op dag ${reachedDay} van ${prevName}` : `in ${prevName}`}
+              </span>
+            )}
+          </Tile>
+
+          <Tile
+            label="Gemiddeld per dag"
+            value={formatEUR(reachedDay > 0 ? spent / reachedDay : 0)}
+          >
+            {reachedDay > 0 ? `over ${reachedDay} ${reachedDay === 1 ? "dag" : "dagen"}` : "nog geen dagen"}
+          </Tile>
+
+          {isCurrent ? (
+            <Tile
+              label="Nog vrij per dag"
+              value={formatEUR(Math.max(summary.remaining, 0) / daysLeft)}
+            >
+              nog {daysLeft} {daysLeft === 1 ? "dag" : "dagen"} deze maand
+            </Tile>
+          ) : (
+            <Tile label="Aantal uitgaven" value={String(costs.length)}>
+              {costs.length > 0 ? `gemiddeld ${formatEUR(spent / costs.length)} per keer` : "geen eenmalige kosten"}
+            </Tile>
+          )}
+
+          <Tile label="Grootste uitgave" value={biggest[0]?.name ?? "—"}>
+            {biggest[0]
+              ? `${formatEUR(biggest[0].amount)} · ${formatDay(biggest[0].date)}`
+              : "nog geen eenmalige kosten"}
+          </Tile>
         </div>
 
-        <Card className="p-6">
-          <ChartHeading
-            title="Over per maand"
-            description="Wat er na alle kosten overblijft. Boven de lijn hield je geld over, eronder kwam je tekort."
-          />
-          <ColumnChart
-            columns={columnsFor(stats, (s) => s.remaining)}
-            variant="diverging"
-            format={formatEUR}
-            caption="Over per maand"
-          />
-        </Card>
+        {/* Pace + categories */}
+        <div className="grid gap-6 lg:grid-cols-5">
+          <Card className="p-6 lg:col-span-3">
+            <Heading
+              title="Uitgaven door de maand"
+              description={
+                prevRunning.length > 0
+                  ? `Je eenmalige kosten opgeteld per dag, naast ${prevName}.`
+                  : "Je eenmalige kosten opgeteld per dag."
+              }
+            />
+            {costs.length === 0 && prevRunning.length === 0 ? (
+              <Empty>Nog geen eenmalige kosten in {monthLabel}.</Empty>
+            ) : (
+              <SpendingChart
+                current={running}
+                previous={prevRunning}
+                currentName={monthName}
+                previousName={prevName}
+              />
+            )}
+          </Card>
 
-        <Card className="p-6">
-          <ChartHeading
-            title="Eenmalige kosten per maand"
-            description="Alles wat je bij Eenmalige kosten invoerde, per maand opgeteld."
-          />
-          <ColumnChart
-            columns={columnsFor(stats, (s) => s.oneTimeCosts)}
-            variant="single"
-            format={formatEUR}
-            caption="Eenmalige kosten per maand"
-          />
-        </Card>
-
-        <div className="grid gap-8 lg:grid-cols-2">
-          <Card className="p-6">
-            <ChartHeading
-              title="Waar gaan je eenmalige kosten naartoe?"
-              description="Opgeteld per naam over deze periode, grootste eerst."
+          <Card className="p-6 lg:col-span-2">
+            <Heading
+              title="Waar ging het naartoe?"
+              description={
+                prevCosts.length === 0
+                  ? "Eenmalige kosten per naam."
+                  : isCurrent
+                    ? `Eenmalige kosten per naam, naast ${prevName} tot en met dag ${reachedDay}.`
+                    : `Eenmalige kosten per naam, naast ${prevName}.`
+              }
             />
             {categories.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nog geen eenmalige kosten in deze periode.
-              </p>
+              <Empty>Nog geen eenmalige kosten in {monthLabel}.</Empty>
             ) : (
-              <BarList rows={categories} showCount />
+              <BarList
+                rows={categories}
+                showCount
+                previousName={prevCosts.length > 0 ? prevName : undefined}
+              />
+            )}
+          </Card>
+        </div>
+
+        {/* Trend, biggest, fixed */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="p-6">
+            <Heading
+              title="Per maand"
+              description={
+                trend.length > 1
+                  ? `Eenmalige kosten, gemiddeld ${formatEUR(trendAverage)}. Klik op een maand om ze te openen.`
+                  : "Eenmalige kosten per maand."
+              }
+            />
+            {trend.every((m) => m.total === 0) ? (
+              <Empty>Nog geen eenmalige kosten in de voorbije maanden.</Empty>
+            ) : (
+              <MonthColumns columns={trend} active={month} />
             )}
           </Card>
 
           <Card className="p-6">
-            <ChartHeading
-              title="Vaste kosten per maand"
-              description="Je terugkerende kosten omgerekend naar een maandbedrag."
+            <Heading title="Grootste uitgaven" description={`De duurste posten van ${monthName}.`} />
+            {biggest.length === 0 ? (
+              <Empty>Nog geen eenmalige kosten in {monthLabel}.</Empty>
+            ) : (
+              <ol className="divide-y divide-border">
+                {biggest.map((e, i) => (
+                  <li key={i} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <span className="w-4 text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{e.name}</p>
+                      <p className="text-xs text-muted-foreground">{formatDay(e.date)}</p>
+                    </div>
+                    <p className="text-sm font-medium tabular-nums">{formatEUR(e.amount)}</p>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+
+          <Card className="p-6">
+            <Heading
+              title="Vaste kosten"
+              description={`Samen ${formatEUR(summary.regularTotal + summary.reserveTotal)} per maand, reserveringen inbegrepen.`}
             />
             {recurring.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nog geen terugkerende kosten.</p>
+              <Empty>Nog geen terugkerende kosten.</Empty>
             ) : (
               <BarList rows={recurring} suffix=" / mnd" />
             )}
@@ -234,16 +369,15 @@ export default async function StatisticsPage({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Je maandinkomen en vaste kosten tellen voor elke maand met de huidige bedragen;
-          eenmalige kosten en inkomsten met wat er in die maand werd ingevoerd. De periode
-          begint ten vroegste in de maand dat je met Vlot begon.
+          Je maandinkomen en vaste kosten tellen voor elke maand met de bedragen van
+          vandaag; eenmalige kosten en inkomsten met wat er in die maand werd ingevoerd.
         </p>
       </div>
     </div>
   );
 }
 
-function ChartHeading({ title, description }: { title: string; description: string }) {
+function Heading({ title, description }: { title: string; description: string }) {
   return (
     <div className="mb-5">
       <h2 className="font-medium">{title}</h2>
@@ -252,15 +386,27 @@ function ChartHeading({ title, description }: { title: string; description: stri
   );
 }
 
-/** Stat tile: label, value (proportional figures — it stands alone), note. */
-function Stat({ label, value, note }: { label: string; value: string; note: string }) {
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="text-sm text-muted-foreground">{children}</p>;
+}
+
+/** Stat tile: label, value (proportional figures — it stands alone), a note. */
+function Tile({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value: string;
+  children: React.ReactNode;
+}) {
   return (
     <Card className="p-4">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-xl font-semibold" title={value}>
+      <p className="mt-1 truncate text-2xl font-semibold" title={value}>
         {value}
       </p>
-      <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{children}</p>
     </Card>
   );
 }

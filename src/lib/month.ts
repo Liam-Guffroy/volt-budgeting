@@ -56,6 +56,11 @@ export function monthBounds(month: MonthKey): { first: DayKey; last: DayKey } {
   return { first: `${month}-01`, last: `${month}-${String(lastDay).padStart(2, "0")}` };
 }
 
+/** Number of days in a month (28-31). */
+export function daysIn(month: MonthKey): number {
+  return Number(monthBounds(month).last.slice(8));
+}
+
 /**
  * The default date for a new entry in `month`: today when today is in that
  * month, otherwise the nearest day of it (last day of a past month, first day

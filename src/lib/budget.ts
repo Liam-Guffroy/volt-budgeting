@@ -53,6 +53,12 @@ export interface BudgetExpense {
   name: string;
   amount: number;
   frequency: Frequency;
+  /**
+   * When a non-monthly bill is next due ("YYYY-MM-DD"), if the user set it.
+   * Not used by the math here; lib/reserve.ts turns it into "what should be
+   * set aside by now".
+   */
+  nextDue?: string | null;
 }
 
 /** The monthly-equivalent cost of one expense. */

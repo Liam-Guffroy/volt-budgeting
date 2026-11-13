@@ -1,8 +1,12 @@
+import { CircleAlert, CircleCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { frequencyLabel, type BudgetSummary } from "@/lib/budget";
-import { formatEUR } from "@/lib/format";
+import { formatDay, formatEUR } from "@/lib/format";
+import type { DayKey } from "@/lib/month";
+import { reserveStatus } from "@/lib/reserve";
 import { cn } from "@/lib/utils";
 import { Collapsible } from "./collapsible";
+import { ReserveBalanceForm } from "./reserve-balance-form";
 
 /** The headline's formula line, mentioning one-offs only when there are any. */
 function formula(summary: BudgetSummary): string {
@@ -13,16 +17,38 @@ function formula(summary: BudgetSummary): string {
   return parts.join(" ");
 }
 
+/** "deze maand" / "volgende maand" / "over 4 maanden" */
+function dueIn(monthsLeft: number): string {
+  if (monthsLeft <= 0) return "deze maand";
+  if (monthsLeft === 1) return "volgende maand";
+  return `over ${monthsLeft} maanden`;
+}
+
 export function ResultsPanel({
   summary,
   monthLabel,
   reserveOpen,
+  reserveBalance,
+  today,
 }: {
   summary: BudgetSummary;
   monthLabel: string;
   reserveOpen: boolean;
+  /** What the user says is set aside for non-monthly bills. */
+  reserveBalance: number;
+  /** Belgian today; due dates are always measured from now, not the viewed month. */
+  today: DayKey;
 }) {
   const negative = summary.remaining < 0;
+
+  // Set-asides with a due date say how much should be saved by now.
+  const reserve = summary.reserve.map((expense) => ({
+    expense,
+    status: reserveStatus(expense, today),
+  }));
+  const dated = reserve.filter((r) => r.status !== null);
+  const shouldHave = dated.reduce((t, r) => t + (r.status?.shouldHave ?? 0), 0);
+  const gap = Math.round((reserveBalance - shouldHave) * 100) / 100;
 
   // Month-specific stats, shown only when that month has any. A lone one spans
   // the full row; two sit side by side.
@@ -84,20 +110,28 @@ export function ResultsPanel({
             </p>
           ) : (
             <ul className="divide-y divide-border">
-              {summary.reserve.map((e) => (
-                <li key={e.id} className="flex items-center justify-between px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{e.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {formatEUR(e.amount)} · {frequencyLabel(e.frequency)}
+              {reserve.map(({ expense: e, status }) => (
+                <li key={e.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{e.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {formatEUR(e.amount)} · {frequencyLabel(e.frequency)}
+                      </p>
+                    </div>
+                    <p className="shrink-0 tabular-nums font-medium">
+                      {formatEUR(e.monthly)}
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">
+                        /mnd
+                      </span>
                     </p>
                   </div>
-                  <p className="tabular-nums font-medium">
-                    {formatEUR(e.monthly)}
-                    <span className="ml-1 text-xs font-normal text-muted-foreground">
-                      /mnd
-                    </span>
-                  </p>
+                  {status ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Vervalt {formatDay(status.due, today)} ({dueIn(status.monthsLeft)}) ·
+                      nu {formatEUR(status.shouldHave)} opzij
+                    </p>
+                  ) : null}
                 </li>
               ))}
               <li className="flex items-center justify-between bg-muted px-4 py-3">
@@ -109,6 +143,52 @@ export function ResultsPanel({
             </ul>
           )}
         </Card>
+
+        {summary.reserve.length > 0 ? (
+          <Card className="space-y-3 p-4">
+            {dated.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Geef een post een vervaldag (het potlood bij Terugkerende kosten) om te
+                zien hoeveel er nu opzij zou moeten staan.
+              </p>
+            ) : (
+              <>
+                <div>
+                  <p className="text-sm text-muted-foreground">Zou nu opzij moeten staan</p>
+                  <p className="mt-1 text-xl font-semibold">{formatEUR(shouldHave)}</p>
+                  {dated.length < reserve.length ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {reserve.length - dated.length}{" "}
+                      {reserve.length - dated.length === 1 ? "post" : "posten"} zonder
+                      vervaldag {reserve.length - dated.length === 1 ? "telt" : "tellen"} niet
+                      mee.
+                    </p>
+                  ) : null}
+                </div>
+                <ReserveBalanceForm
+                  defaultValue={reserveBalance ? String(reserveBalance).replace(".", ",") : ""}
+                />
+                <p
+                  className={cn(
+                    "flex items-center gap-1.5 text-sm font-medium",
+                    gap >= 0 ? "text-[var(--color-positive)]" : "text-[var(--color-negative)]",
+                  )}
+                >
+                  {gap >= 0 ? (
+                    <CircleCheck aria-hidden className="size-4 shrink-0" />
+                  ) : (
+                    <CircleAlert aria-hidden className="size-4 shrink-0" />
+                  )}
+                  {gap >= 0
+                    ? gap < 0.005
+                      ? "Precies op schema."
+                      : `Op schema: ${formatEUR(gap)} meer dan nodig.`
+                    : `${formatEUR(-gap)} te weinig opzij.`}
+                </p>
+              </>
+            )}
+          </Card>
+        ) : null}
       </Collapsible>
     </div>
   );

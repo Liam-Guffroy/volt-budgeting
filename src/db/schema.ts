@@ -38,6 +38,9 @@ export const expenses = pgTable("expenses", {
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   frequency: frequencyEnum("frequency").notNull(),
   position: integer("position").notNull().default(0),
+  // Optional: when a non-monthly bill is next due. A date in the past simply
+  // means that one was paid — lib/reserve.ts rolls it forward by the frequency.
+  nextDue: date("next_due", { mode: "string" }),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
@@ -134,6 +137,11 @@ export const settings = pgTable("settings", {
     .primaryKey()
     .references(() => users.id, { onDelete: "cascade" }),
   monthlyIncome: numeric("monthly_income", { precision: 12, scale: 2 })
+    .notNull()
+    .default("0"),
+  // What the user says is actually set aside for non-monthly bills, to compare
+  // against what should be there by now.
+  reserveBalance: numeric("reserve_balance", { precision: 12, scale: 2 })
     .notNull()
     .default("0"),
 });

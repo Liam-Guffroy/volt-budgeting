@@ -54,10 +54,13 @@ export function ExpenseRow({
   expense,
   isFirst,
   isLast,
+  dueLabel,
 }: {
   expense: NormalizedExpense;
   isFirst: boolean;
   isLast: boolean;
+  /** "vervalt 15 mrt" for a non-monthly bill with a due date; worked out on the server. */
+  dueLabel?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [state, formAction, pending] = useActionState(updateExpense, initial);
@@ -95,6 +98,24 @@ export function ExpenseRow({
               Annuleer
             </Button>
           </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 sm:col-span-4">
+            <label
+              htmlFor={`next-due-${expense.id}`}
+              className="text-sm text-muted-foreground"
+            >
+              Volgende vervaldag
+            </label>
+            <Input
+              id={`next-due-${expense.id}`}
+              name="nextDue"
+              type="date"
+              defaultValue={expense.nextDue ?? ""}
+              className="w-auto"
+            />
+            <span className="text-xs text-muted-foreground">
+              optioneel — alleen voor kosten die niet elke maand komen
+            </span>
+          </div>
           {state.error ? (
             <p className="sm:col-span-4 text-sm text-[var(--color-negative)]">
               {state.error}
@@ -116,6 +137,7 @@ export function ExpenseRow({
         <p className="truncate font-medium">{expense.name}</p>
         <p className="text-sm text-muted-foreground">
           {formatEUR(expense.amount)} · {frequencyLabel(expense.frequency)}
+          {dueLabel ? ` · ${dueLabel}` : ""}
         </p>
       </div>
 

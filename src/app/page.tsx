@@ -20,8 +20,9 @@ import {
   type ListSort,
   type SortableList,
 } from "@/lib/list-sort";
-import { formatEUR } from "@/lib/format";
-import { formatMonth, toMonth } from "@/lib/month";
+import { formatDay, formatEUR } from "@/lib/format";
+import { formatMonth, todayKey, toMonth } from "@/lib/month";
+import { reserveStatus } from "@/lib/reserve";
 import {
   BUILT_IN_QUICK_ADDS,
   type QuickAddKind,
@@ -156,7 +157,10 @@ export default async function PlannerPage({
     name: r.name,
     amount: Number(r.amount),
     frequency: r.frequency,
+    nextDue: r.nextDue,
   }));
+  const reserveBalance = settingRow[0] ? Number(settingRow[0].reserveBalance) : 0;
+  const today = todayKey();
 
   const oneTime = toEntries(oneTimeCostRows);
   const oneTimeIncome = toEntries(oneTimeIncomeRows);
@@ -280,14 +284,18 @@ export default async function PlannerPage({
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
-                  {summary.all.map((e, i) => (
-                    <ExpenseRow
-                      key={e.id}
-                      expense={e}
-                      isFirst={i === 0}
-                      isLast={i === summary.all.length - 1}
-                    />
-                  ))}
+                  {summary.all.map((e, i) => {
+                    const due = e.group === "reserve" ? reserveStatus(e, today) : null;
+                    return (
+                      <ExpenseRow
+                        key={e.id}
+                        expense={e}
+                        isFirst={i === 0}
+                        isLast={i === summary.all.length - 1}
+                        dueLabel={due ? `vervalt ${formatDay(due.due, today)}` : undefined}
+                      />
+                    );
+                  })}
                 </ul>
               )}
             </Card>
@@ -311,6 +319,8 @@ export default async function PlannerPage({
             summary={summary}
             monthLabel={monthLabel}
             reserveOpen={isOpen("reservering")}
+            reserveBalance={reserveBalance}
+            today={today}
           />
         </aside>
       </div>

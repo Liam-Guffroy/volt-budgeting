@@ -15,7 +15,7 @@ import {
   quickAdds,
   settings,
 } from "@/db/schema";
-import { FREQUENCY_KEYS } from "@/lib/budget";
+import { FREQUENCIES, FREQUENCY_KEYS } from "@/lib/budget";
 import {
   SORT_COOKIE,
   isSortableList,
@@ -50,6 +50,14 @@ const expenseSchema = z.object({
   amount: amount.pipe(z.number().positive("Bedrag moet groter zijn dan nul.")),
   frequency: z.enum(FREQUENCY_KEYS),
 });
+
+// An optional due date: empty means "none".
+const dueSchema = z
+  .union([z.literal(""), z.string().refine(isDayKey, "Kies een geldige vervaldag.")])
+  .nullish()
+  .transform((v) => v || null);
+
+const reserveBalanceSchema = z.object({ reserveBalance: amount });
 
 const idSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -184,14 +192,45 @@ export async function updateExpense(
   });
   if (!parsed.success) return fail(parsed);
 
+  const due = dueSchema.safeParse(formData.get("nextDue"));
+  if (!due.success) return fail(due);
+
   await db
     .update(expenses)
     .set({
       name: parsed.data.name,
       amount: parsed.data.amount.toFixed(2),
       frequency: parsed.data.frequency,
+      // A due date only means something for a bill that isn't monthly.
+      nextDue:
+        FREQUENCIES[parsed.data.frequency].group === "reserve" ? due.data : null,
     })
     .where(and(eq(expenses.id, id.data.id), eq(expenses.userId, userId)));
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** Save what's actually set aside for non-monthly bills. */
+export async function setReserveBalance(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await requireUser();
+
+  const parsed = reserveBalanceSchema.safeParse({
+    reserveBalance: formData.get("reserveBalance"),
+  });
+  if (!parsed.success) return fail(parsed);
+
+  const value = parsed.data.reserveBalance.toFixed(2);
+  await db
+    .insert(settings)
+    .values({ userId, reserveBalance: value })
+    .onConflictDoUpdate({
+      target: settings.userId,
+      set: { reserveBalance: value },
+    });
 
   revalidatePath("/");
   return { ok: true };

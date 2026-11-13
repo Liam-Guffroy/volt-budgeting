@@ -28,6 +28,7 @@ export function OneTimeSection({
   entries,
   total,
   addAction,
+  updateAction,
   deleteAction,
   quickAdds,
   placeholder,
@@ -41,6 +42,7 @@ export function OneTimeSection({
   entries: DatedOneTimeEntry[];
   total: number;
   addAction: (prev: FormState, formData: FormData) => Promise<FormState>;
+  updateAction: (prev: FormState, formData: FormData) => Promise<FormState>;
   deleteAction: (formData: FormData) => Promise<void>;
   quickAdds: QuickAddSet;
   placeholder: string;
@@ -80,8 +82,10 @@ export function OneTimeSection({
                 <OneTimeRow
                   key={e.id}
                   entry={e}
+                  updateAction={updateAction}
                   deleteAction={deleteAction}
                   variant={variant}
+                  dates={{ min: first, max: last }}
                 />
               ))}
               <li className="flex items-center justify-between bg-muted px-4 py-3">

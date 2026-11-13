@@ -31,6 +31,8 @@ import {
   addOneTimeIncome,
   deleteOneTimeExpense,
   deleteOneTimeIncome,
+  updateOneTimeExpense,
+  updateOneTimeIncome,
 } from "./actions";
 import { AppHeader } from "./app-header";
 import { Collapsible } from "./collapsible";
@@ -179,6 +181,7 @@ export default async function PlannerPage({
               entries={oneTime}
               total={summary.oneTimeTotal}
               addAction={addOneTimeExpense}
+              updateAction={updateOneTimeExpense}
               deleteAction={deleteOneTimeExpense}
               listId="eenmalige-kosten"
               sort={sortFor("eenmalige-kosten")}
@@ -204,6 +207,7 @@ export default async function PlannerPage({
               entries={oneTimeIncome}
               total={summary.oneTimeIncomeTotal}
               addAction={addOneTimeIncome}
+              updateAction={updateOneTimeIncome}
               deleteAction={deleteOneTimeIncome}
               listId="eenmalige-inkomsten"
               sort={sortFor("eenmalige-inkomsten")}

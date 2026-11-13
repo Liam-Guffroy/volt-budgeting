@@ -211,7 +211,7 @@ src/
     quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen, hide/restore
     one-time-section.tsx    # one-off costs or income: form + month list + total
     one-time-form.tsx       # client add form (name, amount, date) + quick-adds (shared by both)
-    one-time-row.tsx        # one-off cost/income row + date + delete
+    one-time-row.tsx        # client row: date, inline edit (name/amount/date), delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
     statistieken/

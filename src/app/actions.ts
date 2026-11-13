@@ -275,6 +275,42 @@ export async function addOneTimeExpense(
   return { ok: true };
 }
 
+/**
+ * Change a one-off cost's name, amount or date. The month follows the date,
+ * so re-dating an entry moves it to that month.
+ */
+export async function updateOneTimeExpense(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await requireUser();
+
+  const id = idSchema.safeParse({ id: formData.get("id") });
+  if (!id.success) return fail(id);
+
+  const parsed = oneTimeSchema.safeParse({
+    name: formData.get("name"),
+    amount: formData.get("amount"),
+    date: formData.get("date"),
+  });
+  if (!parsed.success) return fail(parsed);
+
+  await db
+    .update(oneTimeExpenses)
+    .set({
+      month: parsed.data.month,
+      entryDate: parsed.data.date,
+      name: parsed.data.name,
+      amount: parsed.data.amount.toFixed(2),
+    })
+    .where(
+      and(eq(oneTimeExpenses.id, id.data.id), eq(oneTimeExpenses.userId, userId)),
+    );
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
 export async function deleteOneTimeExpense(formData: FormData): Promise<void> {
   const userId = await requireUser();
 
@@ -310,6 +346,39 @@ export async function addOneTimeIncome(
     name: parsed.data.name,
     amount: parsed.data.amount.toFixed(2),
   });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** Change one-off income's name, amount or date (the month follows the date). */
+export async function updateOneTimeIncome(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await requireUser();
+
+  const id = idSchema.safeParse({ id: formData.get("id") });
+  if (!id.success) return fail(id);
+
+  const parsed = oneTimeSchema.safeParse({
+    name: formData.get("name"),
+    amount: formData.get("amount"),
+    date: formData.get("date"),
+  });
+  if (!parsed.success) return fail(parsed);
+
+  await db
+    .update(oneTimeIncomes)
+    .set({
+      month: parsed.data.month,
+      entryDate: parsed.data.date,
+      name: parsed.data.name,
+      amount: parsed.data.amount.toFixed(2),
+    })
+    .where(
+      and(eq(oneTimeIncomes.id, id.data.id), eq(oneTimeIncomes.userId, userId)),
+    );
 
   revalidatePath("/");
   return { ok: true };

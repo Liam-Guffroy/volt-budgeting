@@ -7,6 +7,7 @@ import { ThemeToggle } from "./theme-toggle";
 const PAGES = [
   { key: "planner", href: "/", label: "Planner" },
   { key: "statistieken", href: "/statistieken", label: "Statistieken" },
+  { key: "zoeken", href: "/zoeken", label: "Zoeken" },
 ] as const;
 
 /** Title, page navigation, theme toggle and logout — shared by every page. */

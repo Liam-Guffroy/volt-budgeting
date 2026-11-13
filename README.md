@@ -136,6 +136,18 @@ holding the database's UTC clock time, and node-postgres reads them as
 server-local time — hours off. Resolve them in SQL first (`created_at at time
 zone current_setting('TimeZone')`), as the statistics page does.
 
+## Search and export
+
+`/zoeken` lists every one-time cost and income across all months, newest
+first and grouped per month, with a name search (case-insensitive; `%` and `_`
+are matched literally) and a kind filter. Two CSV downloads come from
+`/export`: the list as filtered (`?soort=eenmalig&q=…&type=…`) and the
+recurring costs (`?soort=vast`). The route answers 401 without a session.
+
+The CSV is written for Belgian Excel (`src/lib/csv.ts`): semicolons, decimal
+commas, `dd/mm/yyyy`, a UTF-8 byte-order mark, and a leading apostrophe on
+names that start with `=`, `+`, `-` or `@` so Excel can't run them as formulas.
+
 ## Budgets
 
 A budget is a monthly amount for one category of one-time costs (`budgets`
@@ -227,6 +239,10 @@ src/
     one-time-row.tsx        # client row: date, inline edit (name/amount/date), delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
+    zoeken/
+      page.tsx              # search form, totals, results grouped per month
+      search.ts             # the query, shared with the export
+    export/route.ts         # CSV downloads (one-time entries, recurring costs)
     statistieken/
       page.tsx              # one month: queries, figures, layout
       money-bar.tsx         # income split into fixed / set-aside / one-time / left
@@ -246,6 +262,7 @@ src/
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     list-sort.ts            # newest/oldest-first cookie for the one-time lists
     budgets.ts              # pure budget math: spent, remaining, state per budget
+    csv.ts                  # CSV for Belgian Excel: cells, amounts, dates
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()

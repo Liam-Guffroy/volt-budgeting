@@ -109,6 +109,25 @@ export const hiddenQuickAdds = pgTable(
   ],
 );
 
+// A monthly budget for one category of one-time costs, e.g. € 400 for
+// "Boodschappen". `key` is the name normalised the same way quick-adds and the
+// statistics group names (trimmed, lower-cased), and is what entries are
+// matched on; `name` keeps the spelling the user typed. One budget per key.
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    key: text("key").notNull(),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("budgets_user_key").on(t.userId, t.key)],
+);
+
 // One settings row per user, keyed by userId, holding the monthly take-home income.
 export const settings = pgTable("settings", {
   userId: integer("user_id")

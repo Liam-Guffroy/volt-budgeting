@@ -7,6 +7,7 @@ import { and, asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
+  budgets,
   expenses,
   hiddenQuickAdds,
   oneTimeExpenses,
@@ -96,6 +97,11 @@ const oneTimeSchema = z
     date: z.string().refine(isDayKey, "Kies een geldige datum."),
   })
   .transform((d) => ({ ...d, month: d.date.slice(0, 7) }));
+
+const budgetSchema = z.object({
+  name: z.string().trim().min(1, "Vul een naam in.").max(120),
+  amount: amount.pipe(z.number().positive("Bedrag moet groter zijn dan nul.")),
+});
 
 function fail(parsed: z.SafeParseReturnType<unknown, unknown>): FormState {
   if (parsed.success) return {};
@@ -395,6 +401,53 @@ export async function deleteOneTimeIncome(formData: FormData): Promise<void> {
     .where(
       and(eq(oneTimeIncomes.id, id.data.id), eq(oneTimeIncomes.userId, userId)),
     );
+  revalidatePath("/");
+}
+
+/**
+ * Set a monthly budget for a category of one-time costs. Saving a name that
+ * already has a budget (ignoring case) replaces its amount, so the same form
+ * adds and edits.
+ */
+export async function saveBudget(
+  _prev: FormState,
+  formData: FormData,
+): Promise<FormState> {
+  const userId = await requireUser();
+
+  const parsed = budgetSchema.safeParse({
+    name: formData.get("name"),
+    amount: formData.get("amount"),
+  });
+  if (!parsed.success) return fail(parsed);
+
+  const value = parsed.data.amount.toFixed(2);
+  await db
+    .insert(budgets)
+    .values({
+      userId,
+      name: parsed.data.name,
+      key: quickAddKey(parsed.data.name),
+      amount: value,
+    })
+    .onConflictDoUpdate({
+      target: [budgets.userId, budgets.key],
+      set: { amount: value, name: parsed.data.name },
+    });
+
+  revalidatePath("/");
+  return { ok: true };
+}
+
+export async function deleteBudget(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const id = idSchema.safeParse({ id: formData.get("id") });
+  if (!id.success) return;
+
+  await db
+    .delete(budgets)
+    .where(and(eq(budgets.id, id.data.id), eq(budgets.userId, userId)));
   revalidatePath("/");
 }
 

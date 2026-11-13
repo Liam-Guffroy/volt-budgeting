@@ -19,6 +19,8 @@
 
   --color-positive: #0d9488;
   --color-negative: #dc2626;
+  /* "Nearly used up" on budget meters; always paired with a text label. */
+  --color-warning: #d97706;
 
   /* Chart fills (statistieken). Separate from the text tokens above: marks need
      their own steps per theme. Validated with the dataviz palette checks
@@ -59,6 +61,7 @@
 
   --color-positive: #2dd4bf;
   --color-negative: #f87171;
+  --color-warning: #f59e0b;
 
   /* Dark chart steps are chosen, not flipped: the text tokens above are too
      light to pass the dark-mode lightness band as fills. */

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { and, asc, desc, eq, type AnyColumn } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  budgets as budgetsTable,
   expenses as expensesTable,
   hiddenQuickAdds,
   oneTimeExpenses,
@@ -11,6 +12,7 @@ import {
 } from "@/db/schema";
 import { Card } from "@/components/ui/card";
 import { summarize, type BudgetExpense } from "@/lib/budget";
+import { budgetProgress } from "@/lib/budgets";
 import { COLLAPSE_COOKIE, parseCollapsed, type SectionId } from "@/lib/collapse";
 import {
   SORT_COOKIE,
@@ -35,6 +37,7 @@ import {
   updateOneTimeIncome,
 } from "./actions";
 import { AppHeader } from "./app-header";
+import { BudgetSection } from "./budget-section";
 import { Collapsible } from "./collapsible";
 import { ExpenseForm } from "./expense-form";
 import { ExpenseRow } from "./expense-row";
@@ -84,6 +87,7 @@ export default async function PlannerPage({
     oneTimeIncomeRows,
     quickAddRows,
     hiddenRows,
+    budgetRows,
   ] = await Promise.all([
     db
       .select()
@@ -115,6 +119,11 @@ export default async function PlannerPage({
       .where(eq(quickAdds.userId, userId))
       .orderBy(asc(quickAdds.id)),
     db.select().from(hiddenQuickAdds).where(eq(hiddenQuickAdds.userId, userId)),
+    db
+      .select()
+      .from(budgetsTable)
+      .where(eq(budgetsTable.userId, userId))
+      .orderBy(asc(budgetsTable.id)),
   ]);
 
   // Un-hidden built-ins first, then this account's own buttons; hidden
@@ -155,6 +164,22 @@ export default async function PlannerPage({
   const summary = summarize(income, parsed, oneTime, oneTimeIncome);
   const incomeInput = income ? String(income).replace(".", ",") : "";
 
+  // Budgets against this month's one-time costs.
+  const budgets = budgetProgress(
+    budgetRows.map((b) => ({ id: b.id, name: b.name, key: b.key, amount: Number(b.amount) })),
+    oneTime,
+  );
+  const budgetTotal = budgets.reduce((t, b) => t + b.amount, 0);
+  const budgetSpent = budgets.reduce((t, b) => t + b.spent, 0);
+  // Names to offer in the budget form: the cost quick-adds, then anything
+  // else entered this month.
+  const budgetSuggestions = [
+    ...new Set([
+      ...quickAddsFor("one_time_cost").items.map((q) => q.name),
+      ...oneTime.map((e) => e.name.trim()),
+    ]),
+  ];
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <AppHeader active="planner" />
@@ -191,6 +216,24 @@ export default async function PlannerPage({
               variant="expense"
               emptyText="Geen eenmalige kosten"
               totalLabel="Totaal eenmalig"
+            />
+          </Collapsible>
+
+          <Collapsible
+            id="budgetten"
+            title="Budgetten"
+            description={`Hoeveel je per categorie wilt uitgeven, en waar je in ${monthLabel} staat.`}
+            summary={
+              budgets.length > 0
+                ? `${formatEUR(budgetSpent)} van ${formatEUR(budgetTotal)}`
+                : undefined
+            }
+            defaultOpen={isOpen("budgetten")}
+          >
+            <BudgetSection
+              budgets={budgets}
+              suggestions={budgetSuggestions}
+              monthLabel={monthLabel}
             />
           </Collapsible>
 

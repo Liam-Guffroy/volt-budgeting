@@ -136,6 +136,17 @@ holding the database's UTC clock time, and node-postgres reads them as
 server-local time — hours off. Resolve them in SQL first (`created_at at time
 zone current_setting('TimeZone')`), as the statistics page does.
 
+## Budgets
+
+A budget is a monthly amount for one category of one-time costs (`budgets`
+table, one per account and name). An entry counts toward it when its name
+matches after the same normalisation quick-adds use, so "boodschappen" and
+"Boodschappen" are one category. The planner's *Budgetten* section adds,
+edits (saving an existing name replaces its amount) and deletes them, and shows
+a meter per budget for the month being viewed: on track, nearly used up (from
+80%), or over. The statistics page shows the same meters, fullest first. The
+math is in `src/lib/budgets.ts`.
+
 ## Statistieken
 
 `/statistieken?month=YYYY-MM` looks at one month at a time, with the same month
@@ -209,6 +220,8 @@ src/
     expense-form.tsx        # client form -> addExpense + quick-adds
     expense-row.tsx         # client row: inline edit + reorder + delete
     quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen, hide/restore
+    budget-section.tsx      # client: budget form + a meter per budget (edit/delete)
+    budget-meter.tsx        # one budget as a meter; shared with the statistics page
     one-time-section.tsx    # one-off costs or income: form + month list + total
     one-time-form.tsx       # client add form (name, amount, date) + quick-adds (shared by both)
     one-time-row.tsx        # client row: date, inline edit (name/amount/date), delete
@@ -232,6 +245,7 @@ src/
     stats.ts                # pure statistics math: running totals, categories, trend months, scale
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     list-sort.ts            # newest/oldest-first cookie for the one-time lists
+    budgets.ts              # pure budget math: spent, remaining, state per budget
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()

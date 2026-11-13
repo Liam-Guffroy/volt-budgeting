@@ -2,6 +2,7 @@ import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { db } from "@/db";
 import {
+  budgets as budgetsTable,
   expenses as expensesTable,
   oneTimeExpenses,
   oneTimeIncomes,
@@ -10,6 +11,7 @@ import {
 } from "@/db/schema";
 import { Card } from "@/components/ui/card";
 import { summarize, type BudgetExpense } from "@/lib/budget";
+import { budgetProgress } from "@/lib/budgets";
 import { formatDay, formatEUR } from "@/lib/format";
 import {
   daysIn,
@@ -33,6 +35,7 @@ import {
 } from "@/lib/stats";
 import { cn } from "@/lib/utils";
 import { AppHeader } from "../app-header";
+import { BudgetMeter } from "../budget-meter";
 import { MonthNav } from "../month-nav";
 import { BarList } from "./bar-list";
 import { MoneyBar, type MoneyPart } from "./money-bar";
@@ -77,7 +80,7 @@ export default async function StatisticsPage({
   const inRange = (table: typeof oneTimeExpenses | typeof oneTimeIncomes) =>
     and(eq(table.userId, userId), gte(table.month, rangeStart), lte(table.month, month));
 
-  const [account, settingRow, expenseRows, costRows, incomeRows] = await Promise.all([
+  const [account, settingRow, expenseRows, costRows, incomeRows, budgetRows] = await Promise.all([
     db
       .select({
         // created_at holds the database's UTC clock time; resolve it to an
@@ -104,6 +107,7 @@ export default async function StatisticsPage({
       })
       .from(oneTimeIncomes)
       .where(inRange(oneTimeIncomes)),
+    db.select().from(budgetsTable).where(eq(budgetsTable.userId, userId)),
   ]);
 
   const income = settingRow[0] ? Number(settingRow[0].monthlyIncome) : 0;
@@ -176,6 +180,11 @@ export default async function StatisticsPage({
   }));
   const trendAverage = trend.reduce((t, m) => t + m.total, 0) / trend.length;
   const recurring = recurringBreakdown(expenses, 4);
+  // Budgets against this month's one-time costs, fullest first.
+  const budgets = budgetProgress(
+    budgetRows.map((b) => ({ id: b.id, name: b.name, key: b.key, amount: Number(b.amount) })),
+    costs,
+  ).sort((a, b) => b.ratio - a.ratio);
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -270,6 +279,20 @@ export default async function StatisticsPage({
               : "nog geen eenmalige kosten"}
           </Tile>
         </div>
+
+        {budgets.length > 0 ? (
+          <Card className="p-6">
+            <Heading
+              title="Budgetten"
+              description={`Waar je in ${monthName} staat per categorie. Aanpassen kan op de planner.`}
+            />
+            <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-3">
+              {budgets.map((b) => (
+                <BudgetMeter key={b.id} budget={b} />
+              ))}
+            </div>
+          </Card>
+        ) : null}
 
         {/* Pace + categories */}
         <div className="grid gap-6 lg:grid-cols-5">

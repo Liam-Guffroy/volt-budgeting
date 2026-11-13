@@ -13,6 +13,7 @@ export const COLLAPSE_COOKIE = "vlot_collapsed";
 
 export const SECTION_IDS = [
   "eenmalige-kosten",
+  "budgetten",
   "eenmalige-inkomsten",
   "terugkerende-kosten",
   "inkomen",

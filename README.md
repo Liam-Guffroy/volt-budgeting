@@ -136,6 +136,18 @@ holding the database's UTC clock time, and node-postgres reads them as
 server-local time — hours off. Resolve them in SQL first (`created_at at time
 zone current_setting('TimeZone')`), as the statistics page does.
 
+## Due dates for set-asides
+
+A non-monthly recurring cost can carry a "next due" date (`expenses.next_due`,
+set through the row's pencil). From it `src/lib/reserve.ts` works out what
+should be set aside for that bill by now: for an amount A every P months with n
+monthly set-asides still to come before the due month, A × (P − n) / P. A due
+date in the past means that bill was paid, so it rolls forward by the
+frequency. The results panel shows each bill's due date and that amount, the
+total that should be set aside, and — against `settings.reserve_balance`, what
+the user says is actually there — whether they're on schedule or short. Bills
+without a due date are left out of that total (and the panel says so).
+
 ## Search and export
 
 `/zoeken` lists every one-time cost and income across all months, newest
@@ -232,6 +244,7 @@ src/
     expense-form.tsx        # client form -> addExpense + quick-adds
     expense-row.tsx         # client row: inline edit + reorder + delete
     quick-add-bar.tsx       # client quick-add row: built-ins, own buttons, + Eigen, hide/restore
+    reserve-balance-form.tsx # client: "what is set aside now" field in the results panel
     budget-section.tsx      # client: budget form + a meter per budget (edit/delete)
     budget-meter.tsx        # one budget as a meter; shared with the statistics page
     one-time-section.tsx    # one-off costs or income: form + month list + total
@@ -263,6 +276,7 @@ src/
     list-sort.ts            # newest/oldest-first cookie for the one-time lists
     budgets.ts              # pure budget math: spent, remaining, state per budget
     csv.ts                  # CSV for Belgian Excel: cells, amounts, dates
+    reserve.ts              # due dates: next occurrence, months left, should-have-saved
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()

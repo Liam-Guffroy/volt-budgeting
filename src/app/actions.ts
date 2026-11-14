@@ -41,7 +41,14 @@ const amount = z
   .trim()
   .min(1, "Vul een bedrag in.")
   .transform((s) => Number(s.replace(/\s/g, "").replace(",", ".")))
-  .pipe(z.number().finite("Ongeldig bedrag.").nonnegative("Bedrag mag niet negatief zijn."));
+  // Letters turn into NaN, which fails the type check itself — give that the
+  // same message instead of zod's "Expected number, received nan".
+  .pipe(
+    z
+      .number({ invalid_type_error: "Ongeldig bedrag." })
+      .finite("Ongeldig bedrag.")
+      .nonnegative("Bedrag mag niet negatief zijn."),
+  );
 
 const incomeSchema = z.object({ monthlyIncome: amount });
 

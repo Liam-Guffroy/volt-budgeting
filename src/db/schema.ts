@@ -1,6 +1,7 @@
 import {
   date,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -129,6 +130,32 @@ export const budgets = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("budgets_user_key").on(t.userId, t.key)],
+);
+
+/** A recurring cost as it was when a month was frozen. */
+export interface SnapshotExpense {
+  name: string;
+  amount: number;
+  frequency: (typeof FREQUENCY_KEYS)[number];
+}
+
+// A finished month's income and recurring costs, frozen so that later changes
+// (a raise, a rent increase) don't rewrite the past. Written once per account
+// and month by lib/history.ts; one-time entries are per day already and need
+// no freezing.
+export const monthSnapshots = pgTable(
+  "month_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    month: text("month").notNull(),
+    income: numeric("income", { precision: 12, scale: 2 }).notNull(),
+    expenses: jsonb("expenses").$type<SnapshotExpense[]>().notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("month_snapshots_user_month").on(t.userId, t.month)],
 );
 
 // One settings row per user, keyed by userId, holding the monthly take-home income.

@@ -21,6 +21,7 @@ import {
   type SortableList,
 } from "@/lib/list-sort";
 import { formatDay, formatEUR } from "@/lib/format";
+import { ensureSnapshots, monthBasis } from "@/lib/history";
 import { formatMonth, todayKey, toMonth } from "@/lib/month";
 import { reserveStatus } from "@/lib/reserve";
 import {
@@ -68,6 +69,9 @@ export default async function PlannerPage({
   const userId = await requireUser();
   const month = toMonth((await searchParams).month);
   const monthLabel = formatMonth(month);
+
+  // Freeze any month that has finished since the last visit, before reading.
+  await ensureSnapshots(userId);
 
   const cookieStore = await cookies();
   const collapsed = parseCollapsed(cookieStore.get(COLLAPSE_COOKIE)?.value);
@@ -165,7 +169,14 @@ export default async function PlannerPage({
   const oneTime = toEntries(oneTimeCostRows);
   const oneTimeIncome = toEntries(oneTimeIncomeRows);
 
-  const summary = summarize(income, parsed, oneTime, oneTimeIncome);
+  // A finished month is calculated from its frozen income and recurring
+  // costs; the editable lists below always show today's.
+  const basis = await monthBasis(userId, month, { income, expenses: parsed });
+  const summary = summarize(basis.income, basis.expenses, oneTime, oneTimeIncome);
+  const currentSummary = basis.frozen ? summarize(income, parsed) : summary;
+  const frozenNote = basis.frozen
+    ? ` ${monthLabel} is afgesloten en rekent met de bedragen van toen.`
+    : "";
   const incomeInput = income ? String(income).replace(".", ",") : "";
 
   // Budgets against this month's one-time costs.
@@ -270,7 +281,8 @@ export default async function PlannerPage({
           <Collapsible
             id="terugkerende-kosten"
             title="Terugkerende kosten"
-            summary={`${formatEUR(summary.regularTotal + summary.reserveTotal)} / mnd`}
+            description={basis.frozen ? `Je vaste kosten van nu.${frozenNote}` : undefined}
+            summary={`${formatEUR(currentSummary.regularTotal + currentSummary.reserveTotal)} / mnd`}
             defaultOpen={isOpen("terugkerende-kosten")}
           >
             <Card className="p-6">
@@ -284,14 +296,14 @@ export default async function PlannerPage({
                 </p>
               ) : (
                 <ul className="divide-y divide-border">
-                  {summary.all.map((e, i) => {
+                  {currentSummary.all.map((e, i) => {
                     const due = e.group === "reserve" ? reserveStatus(e, today) : null;
                     return (
                       <ExpenseRow
                         key={e.id}
                         expense={e}
                         isFirst={i === 0}
-                        isLast={i === summary.all.length - 1}
+                        isLast={i === currentSummary.all.length - 1}
                         dueLabel={due ? `vervalt ${formatDay(due.due, today)}` : undefined}
                       />
                     );
@@ -304,6 +316,7 @@ export default async function PlannerPage({
           <Collapsible
             id="inkomen"
             title="Maandelijks netto-inkomen"
+            description={basis.frozen ? `Je inkomen van nu.${frozenNote}` : undefined}
             summary={formatEUR(income)}
             defaultOpen={isOpen("inkomen")}
           >
@@ -321,6 +334,8 @@ export default async function PlannerPage({
             reserveOpen={isOpen("reservering")}
             reserveBalance={reserveBalance}
             today={today}
+            currentReserve={currentSummary.reserve}
+            frozen={basis.frozen ? { month, income: basis.income } : undefined}
           />
         </aside>
       </div>

@@ -22,7 +22,8 @@ import {
   parseOldestFirst,
   serializeOldestFirst,
 } from "@/lib/list-sort";
-import { isDayKey } from "@/lib/month";
+import { ensureSnapshots, refreeze } from "@/lib/history";
+import { isDayKey, isMonthKey } from "@/lib/month";
 import {
   BUILT_IN_QUICK_ADDS,
   QUICK_ADD_KINDS,
@@ -139,6 +140,9 @@ export async function setIncome(
   });
   if (!parsed.success) return fail(parsed);
 
+  // Finished months keep the income they had: freeze them before it changes.
+  await ensureSnapshots(userId);
+
   const value = parsed.data.monthlyIncome.toFixed(2);
   await db
     .insert(settings)
@@ -164,6 +168,8 @@ export async function addExpense(
     frequency: formData.get("frequency"),
   });
   if (!parsed.success) return fail(parsed);
+
+  await ensureSnapshots(userId);
 
   // Append at the end of this user's list.
   const [{ next } = { next: 0 }] = await db
@@ -201,6 +207,8 @@ export async function updateExpense(
 
   const due = dueSchema.safeParse(formData.get("nextDue"));
   if (!due.success) return fail(due);
+
+  await ensureSnapshots(userId);
 
   await db
     .update(expenses)
@@ -295,9 +303,25 @@ export async function deleteExpense(formData: FormData): Promise<void> {
   const id = idSchema.safeParse({ id: formData.get("id") });
   if (!id.success) return;
 
+  await ensureSnapshots(userId);
+
   await db
     .delete(expenses)
     .where(and(eq(expenses.id, id.data.id), eq(expenses.userId, userId)));
+  revalidatePath("/");
+}
+
+/**
+ * Recalculate a finished month from today's income and recurring costs — for
+ * when it was frozen with amounts that were already out of date.
+ */
+export async function refreezeMonth(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const month = formData.get("month");
+  if (!isMonthKey(month)) return;
+
+  await refreeze(userId, month);
   revalidatePath("/");
 }
 

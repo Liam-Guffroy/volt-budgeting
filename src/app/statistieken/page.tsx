@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { summarize, type BudgetExpense } from "@/lib/budget";
 import { budgetProgress } from "@/lib/budgets";
 import { formatDay, formatEUR } from "@/lib/format";
+import { ensureSnapshots, monthBasis } from "@/lib/history";
 import {
   daysIn,
   formatMonth,
@@ -65,6 +66,7 @@ export default async function StatisticsPage({
   searchParams: Promise<{ month?: string }>;
 }) {
   const userId = await requireUser();
+  await ensureSnapshots(userId);
   const month = toMonth((await searchParams).month);
   const prev = shiftMonth(month, -1);
   const monthLabel = formatMonth(month);
@@ -122,10 +124,17 @@ export default async function StatisticsPage({
 
   const costs = inMonth(allCosts, month);
   const prevCosts = inMonth(allCosts, prev);
-  const summary = summarize(income, expenses, withIds(costs), withIds(inMonth(allIncomes, month)));
+  // A finished month uses its frozen income and recurring costs.
+  const basis = await monthBasis(userId, month, { income, expenses });
+  const summary = summarize(
+    basis.income,
+    basis.expenses,
+    withIds(costs),
+    withIds(inMonth(allIncomes, month)),
+  );
 
   // ── Where the money went ──────────────────────────────────────────────
-  const totalIncome = income + summary.oneTimeIncomeTotal;
+  const totalIncome = basis.income + summary.oneTimeIncomeTotal;
   const shortfall = Math.max(-summary.remaining, 0);
   const parts: MoneyPart[] = [
     { key: "vast", label: "Vaste kosten", value: summary.regularTotal, color: "bg-chart-1" },
@@ -179,7 +188,7 @@ export default async function StatisticsPage({
     total: totalOf(inMonth(allCosts, m)),
   }));
   const trendAverage = trend.reduce((t, m) => t + m.total, 0) / trend.length;
-  const recurring = recurringBreakdown(expenses, 4);
+  const recurring = recurringBreakdown(basis.expenses, 4);
   // Budgets against this month's one-time costs, fullest first.
   const budgets = budgetProgress(
     budgetRows.map((b) => ({ id: b.id, name: b.name, key: b.key, amount: Number(b.amount) })),
@@ -392,8 +401,9 @@ export default async function StatisticsPage({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Je maandinkomen en vaste kosten tellen voor elke maand met de bedragen van
-          vandaag; eenmalige kosten en inkomsten met wat er in die maand werd ingevoerd.
+          {basis.frozen
+            ? `${monthLabel} is afgesloten: dit rekent met het inkomen en de vaste kosten van toen. Herberekenen kan op de planner.`
+            : "Een maand die voorbij is, wordt vastgelegd met het inkomen en de vaste kosten van dat moment; latere aanpassingen veranderen ze niet meer."}
         </p>
       </div>
     </div>

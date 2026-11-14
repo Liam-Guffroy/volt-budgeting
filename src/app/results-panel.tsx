@@ -1,10 +1,16 @@
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert, CircleCheck, Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { frequencyLabel, type BudgetSummary } from "@/lib/budget";
+import {
+  frequencyLabel,
+  type BudgetSummary,
+  type NormalizedExpense,
+} from "@/lib/budget";
 import { formatDay, formatEUR } from "@/lib/format";
-import type { DayKey } from "@/lib/month";
+import type { DayKey, MonthKey } from "@/lib/month";
 import { reserveStatus } from "@/lib/reserve";
 import { cn } from "@/lib/utils";
+import { refreezeMonth } from "./actions";
 import { Collapsible } from "./collapsible";
 import { ReserveBalanceForm } from "./reserve-balance-form";
 
@@ -30,6 +36,8 @@ export function ResultsPanel({
   reserveOpen,
   reserveBalance,
   today,
+  currentReserve,
+  frozen,
 }: {
   summary: BudgetSummary;
   monthLabel: string;
@@ -38,17 +46,26 @@ export function ResultsPanel({
   reserveBalance: number;
   /** Belgian today; due dates are always measured from now, not the viewed month. */
   today: DayKey;
+  /** Today's non-monthly bills (the same as summary.reserve unless the month is frozen). */
+  currentReserve: NormalizedExpense[];
+  /** Set when the month is calculated from its frozen income and recurring costs. */
+  frozen?: { month: MonthKey; income: number };
 }) {
   const negative = summary.remaining < 0;
 
-  // Set-asides with a due date say how much should be saved by now.
+  // The month's set-aside list. In a frozen month the rows carry no due date,
+  // so they show none.
   const reserve = summary.reserve.map((expense) => ({
     expense,
     status: reserveStatus(expense, today),
   }));
-  const dated = reserve.filter((r) => r.status !== null);
-  const shouldHave = dated.reduce((t, r) => t + (r.status?.shouldHave ?? 0), 0);
+  // "What should be set aside by now" is about today, so it always comes from
+  // today's bills, whichever month is on screen.
+  const current = currentReserve.map((expense) => reserveStatus(expense, today));
+  const dated = current.filter((s) => s !== null);
+  const shouldHave = dated.reduce((t, s) => t + s.shouldHave, 0);
   const gap = Math.round((reserveBalance - shouldHave) * 100) / 100;
+  const undated = current.length - dated.length;
 
   // Month-specific stats, shown only when that month has any. A lone one spans
   // the full row; two sit side by side.
@@ -80,6 +97,25 @@ export function ResultsPanel({
         </p>
         <p className="mt-1 text-sm text-muted-foreground">{formula(summary)}</p>
       </Card>
+
+      {frozen ? (
+        <Card className="space-y-3 p-4">
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Lock aria-hidden className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {monthLabel} is afgesloten. Dit rekent met het inkomen (
+              {formatEUR(frozen.income)}) en de vaste kosten van toen, ook als je die
+              later aanpaste.
+            </span>
+          </p>
+          <form action={refreezeMonth}>
+            <input type="hidden" name="month" value={frozen.month} />
+            <Button type="submit" variant="outline" size="sm">
+              Herbereken met de bedragen van nu
+            </Button>
+          </form>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-4">
         <Stat label="Vaste kosten / maand" value={formatEUR(summary.regularTotal)} />
@@ -144,7 +180,7 @@ export function ResultsPanel({
           )}
         </Card>
 
-        {summary.reserve.length > 0 ? (
+        {currentReserve.length > 0 ? (
           <Card className="space-y-3 p-4">
             {dated.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -156,12 +192,10 @@ export function ResultsPanel({
                 <div>
                   <p className="text-sm text-muted-foreground">Zou nu opzij moeten staan</p>
                   <p className="mt-1 text-xl font-semibold">{formatEUR(shouldHave)}</p>
-                  {dated.length < reserve.length ? (
+                  {undated > 0 ? (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {reserve.length - dated.length}{" "}
-                      {reserve.length - dated.length === 1 ? "post" : "posten"} zonder
-                      vervaldag {reserve.length - dated.length === 1 ? "telt" : "tellen"} niet
-                      mee.
+                      {undated} {undated === 1 ? "post" : "posten"} zonder vervaldag{" "}
+                      {undated === 1 ? "telt" : "tellen"} niet mee.
                     </p>
                   ) : null}
                 </div>

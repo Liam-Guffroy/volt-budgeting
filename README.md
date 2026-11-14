@@ -136,6 +136,25 @@ holding the database's UTC clock time, and node-postgres reads them as
 server-local time — hours off. Resolve them in SQL first (`created_at at time
 zone current_setting('TimeZone')`), as the statistics page does.
 
+## History: frozen months
+
+Income and recurring costs have one current value each, so on their own a
+raise or a rent increase would rewrite every past month. Instead a finished
+month is **frozen**: its income and recurring costs are copied into
+`month_snapshots` (one row per account and month), and from then on that month
+is calculated from the copy. One-time entries are dated already and need none.
+
+Freezing is lazy (`src/lib/history.ts`): `ensureSnapshots` runs at the top of
+the planner and statistics pages and before every action that changes income
+or recurring costs, so the copy is always taken before a change can land. It
+covers every finished month from the account's first month; months from before
+that keep using current values.
+
+When a frozen month is on screen the planner's results panel says so and
+offers "Herbereken met de bedragen van nu", which re-freezes that month from
+the current values — for when the old amounts were already out of date. The
+editable lists (recurring costs, income) always show today's values.
+
 ## Due dates for set-asides
 
 A non-monthly recurring cost can carry a "next due" date (`expenses.next_due`,
@@ -191,9 +210,9 @@ switcher as the planner:
   Never starts before the account's first month.
 - Largest expenses and recurring costs as monthly amounts.
 
-The math is pure, in `src/lib/stats.ts`. One honest limit, stated on the page:
-every month uses today's income and recurring costs — there's no history of
-those.
+The math is pure, in `src/lib/stats.ts`. A finished month uses its frozen
+income and recurring costs (see *History: frozen months*); the current month
+uses today's.
 
 No chart library: the charts are HTML and a little SVG. Fills use the
 `--color-chart-*` tokens in `globals.css`, chosen per theme and checked for
@@ -277,6 +296,7 @@ src/
     budgets.ts              # pure budget math: spent, remaining, state per budget
     csv.ts                  # CSV for Belgian Excel: cells, amounts, dates
     reserve.ts              # due dates: next occurrence, months left, should-have-saved
+    history.ts              # frozen months: ensureSnapshots, monthBasis, refreeze
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()

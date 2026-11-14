@@ -26,18 +26,21 @@ export function MoneyBar({
   parts,
   income,
   shortfall,
+  incomeLabel = "je inkomen",
 }: {
   parts: MoneyPart[];
   /** Total income for the month; shares are a fraction of this. */
   income: number;
   /** How far costs exceed income (0 when they don't). */
   shortfall: number;
+  /** Whose income the shares are of, e.g. "het gezamenlijk inkomen". */
+  incomeLabel?: string;
 }) {
   const visible = parts.filter((p) => p.value > 0);
   const whole = visible.reduce((t, p) => t + p.value, 0);
   const share = (v: number) => (income > 0 ? v / income : 0);
   const describe = (p: MoneyPart) =>
-    `${p.label}: ${formatEUR(p.value)}${income > 0 ? ` (${percent.format(share(p.value))} van je inkomen)` : ""}`;
+    `${p.label}: ${formatEUR(p.value)}${income > 0 ? ` (${percent.format(share(p.value))} van ${incomeLabel})` : ""}`;
 
   return (
     <div>
@@ -67,7 +70,7 @@ export function MoneyBar({
               <p className="text-sm font-semibold text-foreground">{formatEUR(p.value)}</p>
               <p className="text-xs text-muted-foreground">
                 {p.label}
-                {income > 0 ? ` · ${percent.format(share(p.value))} van je inkomen` : ""}
+                {income > 0 ? ` · ${percent.format(share(p.value))} van ${incomeLabel}` : ""}
               </p>
             </div>
           </div>
@@ -95,7 +98,7 @@ export function MoneyBar({
             <dd className="mt-1 text-lg font-semibold">{formatEUR(p.value)}</dd>
             {income > 0 ? (
               <dd className="text-xs text-muted-foreground">
-                {percent.format(share(p.value))} van je inkomen
+                {percent.format(share(p.value))} van {incomeLabel}
               </dd>
             ) : null}
           </div>

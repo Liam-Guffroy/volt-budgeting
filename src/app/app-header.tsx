@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { householdOf } from "@/lib/household";
+import { getUserId } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { logout } from "./actions";
 import { ThemeToggle } from "./theme-toggle";
@@ -8,10 +10,20 @@ const PAGES = [
   { key: "planner", href: "/", label: "Planner" },
   { key: "statistieken", href: "/statistieken", label: "Statistieken" },
   { key: "zoeken", href: "/zoeken", label: "Zoeken" },
+  { key: "samen", href: "/samen", label: "Samen" },
 ] as const;
 
-/** Title, page navigation, theme toggle and logout — shared by every page. */
-export function AppHeader({ active }: { active: (typeof PAGES)[number]["key"] }) {
+type PageKey = (typeof PAGES)[number]["key"];
+
+/**
+ * Title, page navigation, theme toggle and logout — shared by every page.
+ * "Samen" only appears for accounts that share a household with someone.
+ */
+export async function AppHeader({ active }: { active: PageKey }) {
+  const userId = await getUserId();
+  const inHousehold = userId !== null && (await householdOf(userId)) !== null;
+  const pages = PAGES.filter((p) => p.key !== "samen" || inHousehold || active === "samen");
+
   return (
     <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
       <div>
@@ -21,9 +33,9 @@ export function AppHeader({ active }: { active: (typeof PAGES)[number]["key"] })
         </p>
       </div>
 
-      <div className="flex items-center gap-1">
-        <nav aria-label="Pagina's" className="mr-1 flex items-center gap-1">
-          {PAGES.map((page) => (
+      <div className="flex flex-wrap items-center gap-1">
+        <nav aria-label="Pagina's" className="mr-1 flex flex-wrap items-center gap-1">
+          {pages.map((page) => (
             <Link
               key={page.key}
               href={page.href}

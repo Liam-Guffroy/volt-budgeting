@@ -136,6 +136,27 @@ holding the database's UTC clock time, and node-postgres reads them as
 server-local time — hours off. Resolve them in SQL first (`created_at at time
 zone current_setting('TimeZone')`), as the statistics page does.
 
+## Households: the shared view
+
+Accounts can be linked into a household (`households` table,
+`users.household_id`). Linked accounts get a **Samen** page (`/samen`) with the
+month switcher: the combined amount left over, the combined income split into
+fixed costs / set-asides / one-time costs / left, a per-person table, and
+one-time costs totalled per category across the household. Each member's month
+is calculated exactly as on their own planner, frozen months included.
+
+It shows **totals only** — per person and per category — never anyone's
+individual entries. The menu item only appears for accounts that share a
+household with at least one other account.
+
+There's no screen for linking; like creating accounts, it's a command:
+
+```bash
+npm run household -- link "Thuis" "Liam" "Sabrina"   # create/extend a household
+npm run household -- unlink "Sabrina"                # take an account out
+npm run household -- list
+```
+
 ## History: frozen months
 
 Income and recurring costs have one current value each, so on their own a
@@ -271,6 +292,7 @@ src/
     one-time-row.tsx        # client row: date, inline edit (name/amount/date), delete
     frequency-select.tsx    # native <select> sharing the Input look
     results-panel.tsx       # three totals + reserve breakdown
+    samen/page.tsx          # household view: combined month, per-person table, categories
     zoeken/
       page.tsx              # search form, totals, results grouped per month
       search.ts             # the query, shared with the export
@@ -297,6 +319,7 @@ src/
     csv.ts                  # CSV for Belgian Excel: cells, amounts, dates
     reserve.ts              # due dates: next occurrence, months left, should-have-saved
     history.ts              # frozen months: ensureSnapshots, monthBasis, refreeze
+    household.ts            # which household an account shares, and its members
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
     utils.ts                # cn()
@@ -306,6 +329,7 @@ src/
   components/ui/            # button, input, label, card
 scripts/
   create-user.mjs           # provision/reset an account (npm run user:create)
+  household.mjs             # link/unlink accounts into a household (npm run household)
 drizzle.config.ts           # migration config
 ```
 

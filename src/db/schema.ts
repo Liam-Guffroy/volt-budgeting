@@ -25,6 +25,20 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  // Optional: the household this account shares a combined view with.
+  householdId: integer("household_id").references(() => households.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+// A household groups accounts that want a combined monthly overview next to
+// their own (the /samen page). Members only ever see each other's totals —
+// income, cost totals and totals per category — never individual entries.
+// Linked out-of-band, like accounts: npm run household.
+export const households = pgTable("households", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

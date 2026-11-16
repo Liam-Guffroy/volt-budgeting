@@ -65,8 +65,8 @@ npm run db:migrate              # apply it
 
 ## Auth: password-only accounts
 
-Accounts live in the `users` table. There's no public signup — you provision
-accounts from the CLI:
+Accounts live in the `users` table. There's no public signup — an admin makes
+accounts on the **Beheer** page (see *Admin page* below), or from the CLI:
 
 ```bash
 npm run user:create -- "Liam" "a-strong-password"
@@ -84,10 +84,43 @@ action loads the accounts and finds the one whose hash matches; on success it
 mints a **signed, httpOnly** session cookie carrying the user's id (HMAC-SHA256
 over `<userId>.<issuedAt>`, keyed by `APP_SECRET`). `requireUser()` (in
 `src/lib/session.ts`) verifies that cookie on every protected route/action and
-returns the user id, or redirects to `/login`.
+returns the user id, or redirects to `/login`. It also checks that the account
+still exists (one primary-key lookup per request): the cookie stays validly
+signed after an account is deleted, so without that a deleted account's open
+session would keep showing an empty planner.
 
 Each account's data is private: `expenses` and `settings` carry a `userId`, and
 **every query is scoped by it** so accounts never see each other's budgets.
+
+## Admin page
+
+Accounts with `users.is_admin` get a **Beheer** page (`/beheer`):
+
+- **Accounts** — create one (name + password), give one a new password, or
+  delete one. Deleting takes everything in the account with it, so it is two
+  steps: *Verwijderen* opens a confirmation (`?verwijder=<id>`) that says what
+  will be lost, and only *Definitief verwijderen* does it. You can't delete the
+  account you're logged in with.
+- **Households** — create and remove households, and pick each account's
+  household from a dropdown (it saves on change). Removing a household only
+  unlinks its members.
+
+Creating and resetting refuse a password another account already uses (login is
+by password alone) and a name that only differs in capitals. Passwords are
+typed as plain text there, because the admin has to pass them on; they're still
+stored hashed, so they can be replaced later but never looked up.
+
+Every admin action calls `requireAdmin()` itself — hiding the menu item
+protects nothing, since server actions can be called by anyone logged in.
+Non-admins who open `/beheer` are sent to the planner.
+
+Admin rights are granted from the CLI only, never from the app:
+
+```bash
+npm run user:admin -- "Liam"            # make an account admin
+npm run user:admin -- "Liam" --revoke   # take it away
+npm run user:admin                      # list the admins
+```
 
 ## Core logic
 
@@ -149,7 +182,7 @@ It shows **totals only** — per person and per category — never anyone's
 individual entries. The menu item only appears for accounts that share a
 household with at least one other account.
 
-There's no screen for linking; like creating accounts, it's a command:
+Linking is done on the admin's **Beheer** page, or with a command:
 
 ```bash
 npm run household -- link "Thuis" "Liam" "Sabrina"   # create/extend a household
@@ -362,12 +395,16 @@ src/
     jaar/
       page.tsx              # one year: totals, best/weakest month, table, categories
       year-columns.tsx      # what was left per month, columns around a zero line
+    beheer/
+      page.tsx              # admin: accounts (create / new password / delete) + households
+      forms.tsx             # client forms: create account, new password, household picker
+      actions.ts            # admin server actions, each guarded by requireAdmin()
     login/
       page.tsx              # password-only gate
       login-form.tsx        # client form -> login action
       actions.ts            # match password against accounts + set cookie
   lib/
-    session.ts              # cookie sign/verify (carries userId), requireUser()
+    session.ts              # cookie sign/verify (carries userId), requireUser(), requireAdmin()
     password.ts             # scrypt hash/verify for stored account passwords
     budget.ts               # frequency config + pure normalization/summarize
     month.ts                # month + day keys, Belgian "today", month bounds, default day
@@ -393,6 +430,7 @@ public/icons/               # PNG app icons for the manifest (192/512, rounded +
 scripts/
   create-user.mjs           # provision/reset an account (npm run user:create)
   household.mjs             # link/unlink accounts into a household (npm run household)
+  set-admin.mjs             # grant/revoke admin rights (npm run user:admin)
 drizzle.config.ts           # migration config
 ```
 

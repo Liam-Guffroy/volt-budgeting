@@ -1,7 +1,11 @@
 import "server-only";
 import crypto from "node:crypto";
+import { cache } from "react";
+import { eq } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 
 /**
  * Cookie-based sessions tied to a user account. A successful login (see
@@ -79,15 +83,39 @@ export async function endSession(): Promise<void> {
   store.delete(COOKIE_NAME);
 }
 
-/** The logged-in user's id, or null if the request has no valid session. */
-export async function getUserId(): Promise<number | null> {
-  const store = await cookies();
-  return readToken(store.get(COOKIE_NAME)?.value);
+export interface Account {
+  id: number;
+  name: string;
+  isAdmin: boolean;
 }
 
-/** True if the current request carries a valid session cookie. */
+/**
+ * The logged-in account, or null: no valid cookie, or the account it names no
+ * longer exists. The cookie alone isn't enough — it stays validly signed after
+ * an admin deletes the account, and a session for a deleted account would show
+ * an empty planner and fail on every save. One primary-key lookup, shared by
+ * everything in the same request.
+ */
+export const getAccount = cache(async (): Promise<Account | null> => {
+  const store = await cookies();
+  const userId = readToken(store.get(COOKIE_NAME)?.value);
+  if (userId === null) return null;
+
+  const [account] = await db
+    .select({ id: users.id, name: users.name, isAdmin: users.isAdmin })
+    .from(users)
+    .where(eq(users.id, userId));
+  return account ?? null;
+});
+
+/** The logged-in user's id, or null if the request has no valid session. */
+export async function getUserId(): Promise<number | null> {
+  return (await getAccount())?.id ?? null;
+}
+
+/** True if the current request carries a valid session for an existing account. */
 export async function isAuthenticated(): Promise<boolean> {
-  return (await getUserId()) !== null;
+  return (await getAccount()) !== null;
 }
 
 /**
@@ -98,4 +126,16 @@ export async function requireUser(): Promise<number> {
   const userId = await getUserId();
   if (userId === null) redirect("/login");
   return userId;
+}
+
+/**
+ * Return the logged-in account if it is an admin; otherwise leave. Call at the
+ * top of the admin page and of every admin action — hiding the menu item is
+ * not protection.
+ */
+export async function requireAdmin(): Promise<Account> {
+  const account = await getAccount();
+  if (!account) redirect("/login");
+  if (!account.isAdmin) redirect("/");
+  return account;
 }

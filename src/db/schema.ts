@@ -1,4 +1,5 @@
 import {
+  boolean,
   date,
   integer,
   jsonb,
@@ -29,6 +30,9 @@ export const users = pgTable("users", {
   householdId: integer("household_id").references(() => households.id, {
     onDelete: "set null",
   }),
+  // May use the /beheer page: create and delete accounts, manage households.
+  // Granted out-of-band (npm run user:admin), never from the app itself.
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "user:create": "node scripts/create-user.mjs",
+    "user:admin": "node scripts/set-admin.mjs",
     "household": "node scripts/household.mjs"
   },
   "dependencies": {

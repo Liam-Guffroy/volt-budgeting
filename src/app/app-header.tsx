@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { householdOf } from "@/lib/household";
-import { getUserId } from "@/lib/session";
+import { getAccount } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { logout } from "./actions";
 import { ThemeToggle } from "./theme-toggle";
@@ -12,18 +12,26 @@ const PAGES = [
   { key: "jaar", href: "/jaar", label: "Jaar" },
   { key: "zoeken", href: "/zoeken", label: "Zoeken" },
   { key: "samen", href: "/samen", label: "Samen" },
+  { key: "beheer", href: "/beheer", label: "Beheer" },
 ] as const;
 
 type PageKey = (typeof PAGES)[number]["key"];
 
 /**
  * Title, page navigation, theme toggle and logout — shared by every page.
- * "Samen" only appears for accounts that share a household with someone.
+ * "Samen" only appears for accounts that share a household with someone, and
+ * "Beheer" only for admins (the page checks that itself as well).
  */
 export async function AppHeader({ active }: { active: PageKey }) {
-  const userId = await getUserId();
-  const inHousehold = userId !== null && (await householdOf(userId)) !== null;
-  const pages = PAGES.filter((p) => p.key !== "samen" || inHousehold || active === "samen");
+  const account = await getAccount();
+  const inHousehold = account !== null && (await householdOf(account.id)) !== null;
+  const pages = PAGES.filter((p) =>
+    p.key === "samen"
+      ? inHousehold || active === "samen"
+      : p.key === "beheer"
+        ? account?.isAdmin === true
+        : true,
+  );
 
   return (
     <header className="mb-8 flex flex-wrap items-center justify-between gap-4">

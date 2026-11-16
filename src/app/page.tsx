@@ -1,4 +1,7 @@
+import { Fragment } from "react";
+import Link from "next/link";
 import { cookies } from "next/headers";
+import { LayoutList } from "lucide-react";
 import { and, asc, desc, eq, type AnyColumn } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -10,6 +13,7 @@ import {
   quickAdds,
   settings,
 } from "@/db/schema";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { summarize, type BudgetExpense } from "@/lib/budget";
 import { budgetProgress } from "@/lib/budgets";
@@ -22,7 +26,12 @@ import {
 } from "@/lib/list-sort";
 import { formatDay, formatEUR } from "@/lib/format";
 import { ensureSnapshots, monthBasis } from "@/lib/history";
-import { formatMonth, todayKey, toMonth } from "@/lib/month";
+import { currentMonth, formatMonth, todayKey, toMonth, type MonthKey } from "@/lib/month";
+import {
+  SECTION_LABELS,
+  parseLayout,
+  type PlannerSection,
+} from "@/lib/planner-layout";
 import { reserveStatus } from "@/lib/reserve";
 import {
   BUILT_IN_QUICK_ADDS,
@@ -30,6 +39,7 @@ import {
   type QuickAddSet,
 } from "@/lib/quick-adds";
 import { requireUser } from "@/lib/session";
+import { cn } from "@/lib/utils";
 import {
   addOneTimeExpense,
   addOneTimeIncome,
@@ -44,10 +54,20 @@ import { Collapsible } from "./collapsible";
 import { ExpenseForm } from "./expense-form";
 import { ExpenseRow } from "./expense-row";
 import { IncomeForm } from "./income-form";
+import { LayoutPanel } from "./layout-panel";
 import { MonthNav } from "./month-nav";
 import type { DatedOneTimeEntry } from "./one-time-row";
 import { OneTimeSection } from "./one-time-section";
 import { ResultsPanel } from "./results-panel";
+
+/** The planner URL for a month, with or without the layout editor open. */
+function plannerHref(month: MonthKey, editing: boolean): string {
+  const params = new URLSearchParams();
+  if (month !== currentMonth()) params.set("month", month);
+  if (editing) params.set("indeling", "1");
+  const query = params.toString();
+  return query ? `/?${query}` : "/";
+}
 
 /** DB numeric rows -> entries for the budget math, keeping their day. */
 function toEntries(
@@ -64,11 +84,15 @@ function toEntries(
 export default async function PlannerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string }>;
+  searchParams: Promise<{ month?: string; indeling?: string }>;
 }) {
   const userId = await requireUser();
-  const month = toMonth((await searchParams).month);
+  const params = await searchParams;
+  const month = toMonth(params.month);
   const monthLabel = formatMonth(month);
+  // The layout editor is open while the URL says so: no client state needed,
+  // and every change keeps it open.
+  const editing = params.indeling === "1";
 
   // Freeze any month that has finished since the last visit, before reading.
   await ensureSnapshots(userId);
@@ -164,6 +188,7 @@ export default async function PlannerPage({
     nextDue: r.nextDue,
   }));
   const reserveBalance = settingRow[0] ? Number(settingRow[0].reserveBalance) : 0;
+  const layout = parseLayout(settingRow[0]?.plannerLayout);
   const today = todayKey();
 
   const oneTime = toEntries(oneTimeCostRows);
@@ -195,139 +220,179 @@ export default async function PlannerPage({
     ]),
   ];
 
+  // The left column's sections, keyed by id; rendered in this account's order.
+  const sections: Record<PlannerSection, React.ReactNode> = {
+    "eenmalige-kosten": (
+    <Collapsible
+          id="eenmalige-kosten"
+          title="Eenmalige kosten"
+          description={`Alleen voor ${monthLabel} — telt niet mee in andere maanden.`}
+          summary={formatEUR(summary.oneTimeTotal)}
+          defaultOpen={isOpen("eenmalige-kosten")}
+        >
+          <OneTimeSection
+            month={month}
+            monthLabel={monthLabel}
+            entries={oneTime}
+            total={summary.oneTimeTotal}
+            addAction={addOneTimeExpense}
+            updateAction={updateOneTimeExpense}
+            deleteAction={deleteOneTimeExpense}
+            listId="eenmalige-kosten"
+            sort={sortFor("eenmalige-kosten")}
+            quickAdds={quickAddsFor("one_time_cost")}
+            placeholder="bv. Boodschappen"
+            idPrefix="one-time"
+            variant="expense"
+            emptyText="Geen eenmalige kosten"
+            totalLabel="Totaal eenmalig"
+          />
+        </Collapsible>
+    ),
+    "budgetten": (
+    <Collapsible
+          id="budgetten"
+          title="Budgetten"
+          description={`Hoeveel je per categorie wilt uitgeven, en waar je in ${monthLabel} staat.`}
+          summary={
+            budgets.length > 0
+              ? `${formatEUR(budgetSpent)} van ${formatEUR(budgetTotal)}`
+              : undefined
+          }
+          defaultOpen={isOpen("budgetten")}
+        >
+          <BudgetSection
+            budgets={budgets}
+            suggestions={budgetSuggestions}
+            monthLabel={monthLabel}
+          />
+        </Collapsible>
+    ),
+    "eenmalige-inkomsten": (
+    <Collapsible
+          id="eenmalige-inkomsten"
+          title="Eenmalige inkomsten"
+          description={`Bovenop je vaste inkomen, alleen voor ${monthLabel}.`}
+          summary={`+ ${formatEUR(summary.oneTimeIncomeTotal)}`}
+          defaultOpen={isOpen("eenmalige-inkomsten")}
+        >
+          <OneTimeSection
+            month={month}
+            monthLabel={monthLabel}
+            entries={oneTimeIncome}
+            total={summary.oneTimeIncomeTotal}
+            addAction={addOneTimeIncome}
+            updateAction={updateOneTimeIncome}
+            deleteAction={deleteOneTimeIncome}
+            listId="eenmalige-inkomsten"
+            sort={sortFor("eenmalige-inkomsten")}
+            quickAdds={quickAddsFor("one_time_income")}
+            placeholder="bv. Vakantiegeld"
+            idPrefix="one-time-income"
+            variant="income"
+            emptyText="Geen eenmalige inkomsten"
+            totalLabel="Totaal eenmalig inkomen"
+          />
+        </Collapsible>
+    ),
+    "terugkerende-kosten": (
+    <Collapsible
+          id="terugkerende-kosten"
+          title="Terugkerende kosten"
+          description={basis.frozen ? `Je vaste kosten van nu.${frozenNote}` : undefined}
+          summary={`${formatEUR(currentSummary.regularTotal + currentSummary.reserveTotal)} / mnd`}
+          defaultOpen={isOpen("terugkerende-kosten")}
+        >
+          <Card className="p-6">
+            <ExpenseForm quickAdds={quickAddsFor("recurring")} />
+          </Card>
+    
+          <Card className="overflow-hidden">
+            {parsed.length === 0 ? (
+              <p className="px-4 py-6 text-sm text-muted-foreground">
+                Nog geen kosten toegevoegd.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {currentSummary.all.map((e, i) => {
+                  const due = e.group === "reserve" ? reserveStatus(e, today) : null;
+                  return (
+                    <ExpenseRow
+                      key={e.id}
+                      expense={e}
+                      isFirst={i === 0}
+                      isLast={i === currentSummary.all.length - 1}
+                      dueLabel={due ? `vervalt ${formatDay(due.due, today)}` : undefined}
+                    />
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </Collapsible>
+    ),
+    "inkomen": (
+    <Collapsible
+          id="inkomen"
+          title="Maandelijks netto-inkomen"
+          description={basis.frozen ? `Je inkomen van nu.${frozenNote}` : undefined}
+          summary={formatEUR(income)}
+          defaultOpen={isOpen("inkomen")}
+        >
+          <Card className="p-6">
+            <IncomeForm defaultValue={incomeInput} />
+          </Card>
+        </Collapsible>
+    ),
+  };
+  const shown = layout.order.filter((id) => !layout.hidden.includes(id));
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <AppHeader active="planner" />
 
-      <div className="mb-8 flex justify-center sm:justify-start">
+      <div className="mb-8 flex flex-wrap items-center justify-center gap-3 sm:justify-between">
         <MonthNav month={month} />
+        <Link
+          href={editing ? plannerHref(month, false) : plannerHref(month, true)}
+          aria-expanded={editing}
+          className={cn(buttonVariants({ variant: editing ? "outline" : "ghost", size: "sm" }))}
+        >
+          <LayoutList />
+          Indeling
+        </Link>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_22rem]">
-        {/* Left: inputs. The month-specific sections come first (one-off costs
-            are typed in constantly), then the ones that hold every month. Each
-            folds away to its header and remembers that per browser. */}
-        <div className="space-y-8">
-          <Collapsible
-            id="eenmalige-kosten"
-            title="Eenmalige kosten"
-            description={`Alleen voor ${monthLabel} — telt niet mee in andere maanden.`}
-            summary={formatEUR(summary.oneTimeTotal)}
-            defaultOpen={isOpen("eenmalige-kosten")}
-          >
-            <OneTimeSection
-              month={month}
-              monthLabel={monthLabel}
-              entries={oneTime}
-              total={summary.oneTimeTotal}
-              addAction={addOneTimeExpense}
-              updateAction={updateOneTimeExpense}
-              deleteAction={deleteOneTimeExpense}
-              listId="eenmalige-kosten"
-              sort={sortFor("eenmalige-kosten")}
-              quickAdds={quickAddsFor("one_time_cost")}
-              placeholder="bv. Boodschappen"
-              idPrefix="one-time"
-              variant="expense"
-              emptyText="Geen eenmalige kosten"
-              totalLabel="Totaal eenmalig"
-            />
-          </Collapsible>
+        {/* Left: inputs, in this account's own order (default: the month-
+            specific sections first, then the ones that hold every month). Each
+            folds away to its header and remembers that per browser. min-w-0 lets
+            the column shrink to the screen instead of growing to fit
+            non-wrapping content (the layout editor's labels truncate instead). */}
+        <div className="min-w-0 space-y-8">
+          {editing ? (
+            <LayoutPanel layout={layout} closeHref={plannerHref(month, false)} />
+          ) : null}
 
-          <Collapsible
-            id="budgetten"
-            title="Budgetten"
-            description={`Hoeveel je per categorie wilt uitgeven, en waar je in ${monthLabel} staat.`}
-            summary={
-              budgets.length > 0
-                ? `${formatEUR(budgetSpent)} van ${formatEUR(budgetTotal)}`
-                : undefined
-            }
-            defaultOpen={isOpen("budgetten")}
-          >
-            <BudgetSection
-              budgets={budgets}
-              suggestions={budgetSuggestions}
-              monthLabel={monthLabel}
-            />
-          </Collapsible>
+          {shown.map((id) => (
+            <Fragment key={id}>{sections[id]}</Fragment>
+          ))}
 
-          <Collapsible
-            id="eenmalige-inkomsten"
-            title="Eenmalige inkomsten"
-            description={`Bovenop je vaste inkomen, alleen voor ${monthLabel}.`}
-            summary={`+ ${formatEUR(summary.oneTimeIncomeTotal)}`}
-            defaultOpen={isOpen("eenmalige-inkomsten")}
-          >
-            <OneTimeSection
-              month={month}
-              monthLabel={monthLabel}
-              entries={oneTimeIncome}
-              total={summary.oneTimeIncomeTotal}
-              addAction={addOneTimeIncome}
-              updateAction={updateOneTimeIncome}
-              deleteAction={deleteOneTimeIncome}
-              listId="eenmalige-inkomsten"
-              sort={sortFor("eenmalige-inkomsten")}
-              quickAdds={quickAddsFor("one_time_income")}
-              placeholder="bv. Vakantiegeld"
-              idPrefix="one-time-income"
-              variant="income"
-              emptyText="Geen eenmalige inkomsten"
-              totalLabel="Totaal eenmalig inkomen"
-            />
-          </Collapsible>
-
-          <Collapsible
-            id="terugkerende-kosten"
-            title="Terugkerende kosten"
-            description={basis.frozen ? `Je vaste kosten van nu.${frozenNote}` : undefined}
-            summary={`${formatEUR(currentSummary.regularTotal + currentSummary.reserveTotal)} / mnd`}
-            defaultOpen={isOpen("terugkerende-kosten")}
-          >
-            <Card className="p-6">
-              <ExpenseForm quickAdds={quickAddsFor("recurring")} />
-            </Card>
-
-            <Card className="overflow-hidden">
-              {parsed.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-muted-foreground">
-                  Nog geen kosten toegevoegd.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {currentSummary.all.map((e, i) => {
-                    const due = e.group === "reserve" ? reserveStatus(e, today) : null;
-                    return (
-                      <ExpenseRow
-                        key={e.id}
-                        expense={e}
-                        isFirst={i === 0}
-                        isLast={i === currentSummary.all.length - 1}
-                        dueLabel={due ? `vervalt ${formatDay(due.due, today)}` : undefined}
-                      />
-                    );
-                  })}
-                </ul>
-              )}
-            </Card>
-          </Collapsible>
-
-          <Collapsible
-            id="inkomen"
-            title="Maandelijks netto-inkomen"
-            description={basis.frozen ? `Je inkomen van nu.${frozenNote}` : undefined}
-            summary={formatEUR(income)}
-            defaultOpen={isOpen("inkomen")}
-          >
-            <Card className="p-6">
-              <IncomeForm defaultValue={incomeInput} />
-            </Card>
-          </Collapsible>
+          {!editing && layout.hidden.length > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Verborgen: {layout.hidden.map((id) => SECTION_LABELS[id]).join(", ")} ·{" "}
+              <Link
+                href={plannerHref(month, true)}
+                className="underline underline-offset-4 hover:text-foreground"
+              >
+                Indeling aanpassen
+              </Link>
+            </p>
+          ) : null}
         </div>
 
         {/* Right: results */}
-        <aside className="lg:sticky lg:top-8 lg:self-start">
+        <aside className="min-w-0 lg:sticky lg:top-8 lg:self-start">
           <ResultsPanel
             summary={summary}
             monthLabel={monthLabel}

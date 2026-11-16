@@ -185,6 +185,9 @@ export const settings = pgTable("settings", {
   reserveBalance: numeric("reserve_balance", { precision: 12, scale: 2 })
     .notNull()
     .default("0"),
+  // Order and visibility of the planner's sections ({ order, hidden });
+  // null = the default. Always read through parseLayout in lib/planner-layout.ts.
+  plannerLayout: jsonb("planner_layout"),
 });
 
 export type User = typeof users.$inferSelect;

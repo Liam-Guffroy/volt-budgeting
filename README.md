@@ -241,6 +241,17 @@ lightness, chroma, colour-blind separation and contrast on the card surface —
 `--color-chart-1..4` are validated *in that order*, so re-run the checks before
 reordering or changing one.
 
+## Planner layout
+
+The **Indeling** button next to the month switcher opens an editor
+(`?indeling=1`) where the planner's sections can be moved up or down and
+hidden. The layout is saved per account in `settings.planner_layout` (null =
+default) and always read through `parseLayout` (`src/lib/planner-layout.ts`),
+which drops unknown section ids and appends sections it doesn't mention — so a
+section added to the app later shows up for everyone. Hidden sections are
+listed under the planner with a link back to the editor; "Standaard herstellen"
+resets everything.
+
 ## Collapsible sections
 
 Every planner section folds away to its header line, which keeps showing the
@@ -280,6 +291,7 @@ src/
     theme-toggle.tsx        # client light/dark toggle
     month-nav.tsx           # prev/next month links (?month=YYYY-MM)
     collapsible.tsx         # client fold-away section header (state in a cookie)
+    layout-panel.tsx        # planner layout editor: reorder / hide sections
     income-form.tsx         # client form -> setIncome
     expense-form.tsx        # client form -> addExpense + quick-adds
     expense-row.tsx         # client row: inline edit + reorder + delete
@@ -315,6 +327,7 @@ src/
     stats.ts                # pure statistics math: running totals, categories, trend months, scale
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     list-sort.ts            # newest/oldest-first cookie for the one-time lists
+    planner-layout.ts       # section order + hidden sections: parse, edit, defaults
     budgets.ts              # pure budget math: spent, remaining, state per budget
     csv.ts                  # CSV for Belgian Excel: cells, amounts, dates
     reserve.ts              # due dates: next occurrence, months left, should-have-saved

@@ -23,6 +23,12 @@ import {
   serializeOldestFirst,
 } from "@/lib/list-sort";
 import { ensureSnapshots, refreeze } from "@/lib/history";
+import {
+  DEFAULT_LAYOUT,
+  PLANNER_SECTIONS,
+  editLayout,
+  parseLayout,
+} from "@/lib/planner-layout";
 import { isDayKey, isMonthKey } from "@/lib/month";
 import {
   BUILT_IN_QUICK_ADDS,
@@ -653,6 +659,46 @@ export async function setListSort(formData: FormData): Promise<void> {
     maxAge: 60 * 60 * 24 * 365,
     sameSite: "lax",
   });
+  revalidatePath("/");
+}
+
+const layoutSchema = z.discriminatedUnion("op", [
+  z.object({
+    op: z.enum(["up", "down", "toggle"]),
+    section: z.enum(PLANNER_SECTIONS),
+  }),
+  z.object({ op: z.literal("reset") }),
+]);
+
+/**
+ * Change the planner's section layout for this account: move a section one
+ * place, show/hide it, or go back to the default. Each click is one small
+ * read-modify-write, like reordering recurring costs.
+ */
+export async function updatePlannerLayout(formData: FormData): Promise<void> {
+  const userId = await requireUser();
+
+  const parsed = layoutSchema.safeParse({
+    op: formData.get("op"),
+    section: formData.get("section") ?? undefined,
+  });
+  if (!parsed.success) return;
+
+  const [row] = await db
+    .select({ plannerLayout: settings.plannerLayout })
+    .from(settings)
+    .where(eq(settings.userId, userId));
+
+  const next =
+    parsed.data.op === "reset"
+      ? DEFAULT_LAYOUT
+      : editLayout(parseLayout(row?.plannerLayout), parsed.data.section, parsed.data.op);
+
+  await db
+    .insert(settings)
+    .values({ userId, plannerLayout: next })
+    .onConflictDoUpdate({ target: settings.userId, set: { plannerLayout: next } });
+
   revalidatePath("/");
 }
 

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { applyThemeColor } from "@/lib/theme";
 
 /**
  * Light/dark toggle. The actual theme class is applied before paint by the
@@ -21,6 +22,7 @@ export function ThemeToggle() {
   function toggle() {
     const next = !document.documentElement.classList.contains("dark");
     document.documentElement.classList.toggle("dark", next);
+    applyThemeColor(next);
     try {
       localStorage.setItem("theme", next ? "dark" : "light");
     } catch {

@@ -9,6 +9,7 @@ import { ThemeToggle } from "./theme-toggle";
 const PAGES = [
   { key: "planner", href: "/", label: "Planner" },
   { key: "statistieken", href: "/statistieken", label: "Statistieken" },
+  { key: "jaar", href: "/jaar", label: "Jaar" },
   { key: "zoeken", href: "/zoeken", label: "Zoeken" },
   { key: "samen", href: "/samen", label: "Samen" },
 ] as const;

@@ -41,6 +41,7 @@ import { MonthNav } from "../month-nav";
 import { BarList } from "./bar-list";
 import { MoneyBar, type MoneyPart } from "./money-bar";
 import { MonthColumns } from "./month-columns";
+import { Empty, Heading, Tile } from "./parts";
 import { SpendingChart } from "./spending-chart";
 
 export const metadata = { title: "Statistieken — Vlot" };
@@ -407,39 +408,5 @@ export default async function StatisticsPage({
         </p>
       </div>
     </div>
-  );
-}
-
-function Heading({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="mb-5">
-      <h2 className="font-medium">{title}</h2>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <p className="text-sm text-muted-foreground">{children}</p>;
-}
-
-/** Stat tile: label, value (proportional figures — it stands alone), a note. */
-function Tile({
-  label,
-  value,
-  children,
-}: {
-  label: string;
-  value: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="p-4">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 truncate text-2xl font-semibold" title={value}>
-        {value}
-      </p>
-      <p className="mt-1 text-xs text-muted-foreground">{children}</p>
-    </Card>
   );
 }

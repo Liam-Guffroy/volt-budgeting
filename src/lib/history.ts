@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   expenses,
@@ -135,4 +135,45 @@ export async function monthBasis(
     }
   }
   return { ...current, frozen: false };
+}
+
+/**
+ * `monthBasis` for a run of months in one query — the year overview needs
+ * twelve at once. `months` must be sorted, oldest first.
+ */
+export async function monthBases(
+  userId: number,
+  months: MonthKey[],
+  current: { income: number; expenses: BudgetExpense[] },
+): Promise<Map<MonthKey, MonthBasis>> {
+  const bases = new Map<MonthKey, MonthBasis>();
+  if (months.length === 0) return bases;
+
+  const snapshots = await db
+    .select()
+    .from(monthSnapshots)
+    .where(
+      and(
+        eq(monthSnapshots.userId, userId),
+        gte(monthSnapshots.month, months[0]),
+        lte(monthSnapshots.month, months[months.length - 1]),
+      ),
+    );
+  const frozen = new Map(snapshots.map((s) => [s.month, s]));
+  const now = currentMonth();
+
+  for (const month of months) {
+    const snapshot = month < now ? frozen.get(month) : undefined;
+    bases.set(
+      month,
+      snapshot
+        ? {
+            income: Number(snapshot.income),
+            expenses: snapshot.expenses.map((e, id) => ({ id, ...e })),
+            frozen: true,
+          }
+        : { ...current, frozen: false },
+    );
+  }
+  return bases;
 }

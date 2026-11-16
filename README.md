@@ -241,6 +241,47 @@ lightness, chroma, colour-blind separation and contrast on the card surface —
 `--color-chart-1..4` are validated *in that order*, so re-run the checks before
 reordering or changing one.
 
+## Jaaroverzicht
+
+`/jaar?year=YYYY` puts a year side by side: what was left in total, income and
+costs, the best and weakest month, a column per month around a zero line
+(above = money over, below = a shortfall), the same figures as a table with
+totals, and the year's one-time costs per name plus the largest ones. A column
+or a month name opens that month's statistics.
+
+Only months the account was in use count: from its first month (creation, or an
+earlier month an entry was filed under) up to the current one. Months still to
+come are left out rather than projected. The current month is included but
+marked as running, and it is never the "best" or "weakest" month — those need
+two finished months. The year switcher stops at the first and the current year.
+
+Each month is calculated like everywhere else: a finished month from its frozen
+income and recurring costs, the current one from today's (`monthBases` in
+`src/lib/history.ts` fetches the year's snapshots in one query). The math is
+pure, in `src/lib/year.ts`.
+
+## Install as an app
+
+Vlot can be put on a phone's home screen and then opens full-screen, without
+the browser bars:
+
+- **Android (Chrome):** menu ⋮ → *App installeren* / *Toevoegen aan
+  startscherm*. Long-pressing the icon offers shortcuts to Statistieken,
+  Jaaroverzicht and Zoeken.
+- **iPhone (Safari):** share button → *Zet op beginscherm*.
+
+This needs the app to be served over **https** (or `localhost`); over plain
+http on the local network a phone only makes a bookmark that opens in the
+browser.
+
+What makes it work: `src/app/manifest.ts` (name, colours, icons, shortcuts),
+the PNG icons in `public/icons/` (rounded ones, plus full-bleed "maskable" ones
+the launcher crops to its own shape) and `src/app/apple-icon.png` for iOS — all
+rendered from the shapes in `icon.svg`. A `theme-color` meta tag follows the
+light/dark toggle (`src/lib/theme.ts`) so the status bar matches the page.
+There is no service worker on purpose: every page is rendered per request
+behind a login, so there is nothing useful to show offline.
+
 ## Planner layout
 
 The **Indeling** button next to the month switcher opens an editor
@@ -284,10 +325,12 @@ constraint changed, and `db:push` then offers to **truncate** the table. Prefer
 ```
 src/
   app/
-    layout.tsx              # root shell + globals.css + no-flash theme script
+    layout.tsx              # root shell + globals.css + no-flash theme script + theme-color
+    manifest.ts             # web app manifest: install to the home screen
+    apple-icon.png          # iOS home-screen icon
     page.tsx                # planner: requireUser(), reads this user's data, composes UI
     actions.ts             # setIncome / addExpense / updateExpense / deleteExpense / logout (Zod, userId-scoped)
-    app-header.tsx          # title + page nav (Planner / Statistieken) + theme + logout
+    app-header.tsx          # title + page nav (Planner / Statistieken / Jaar / …) + theme + logout
     theme-toggle.tsx        # client light/dark toggle
     month-nav.tsx           # prev/next month links (?month=YYYY-MM)
     collapsible.tsx         # client fold-away section header (state in a cookie)
@@ -315,6 +358,10 @@ src/
       spending-chart.tsx    # client line chart: running total vs the month before
       month-columns.tsx     # one-time costs per month; columns link to their month
       bar-list.tsx          # ranked bars with amount, share and last month's figure
+      parts.tsx             # heading / empty note / stat tile, shared with the year page
+    jaar/
+      page.tsx              # one year: totals, best/weakest month, table, categories
+      year-columns.tsx      # what was left per month, columns around a zero line
     login/
       page.tsx              # password-only gate
       login-form.tsx        # client form -> login action
@@ -325,13 +372,15 @@ src/
     budget.ts               # frequency config + pure normalization/summarize
     month.ts                # month + day keys, Belgian "today", month bounds, default day
     stats.ts                # pure statistics math: running totals, categories, trend months, scale
+    year.ts                 # pure year math: counted months, per-month figures, totals, best/weakest
+    theme.ts                # page background per theme, for the theme-color meta tag
     collapse.ts             # collapsed-sections cookie: ids, parse, serialize
     list-sort.ts            # newest/oldest-first cookie for the one-time lists
     planner-layout.ts       # section order + hidden sections: parse, edit, defaults
     budgets.ts              # pure budget math: spent, remaining, state per budget
     csv.ts                  # CSV for Belgian Excel: cells, amounts, dates
     reserve.ts              # due dates: next occurrence, months left, should-have-saved
-    history.ts              # frozen months: ensureSnapshots, monthBasis, refreeze
+    history.ts              # frozen months: ensureSnapshots, monthBasis(es), refreeze
     household.ts            # which household an account shares, and its members
     quick-adds.ts           # built-in quick-add buttons per category
     format.ts               # nl-BE euro + short day labels
@@ -340,6 +389,7 @@ src/
     index.ts                # Drizzle client (node-postgres)
     schema.ts               # users + expenses + one-time expenses/incomes + quick-adds (own + hidden) + settings
   components/ui/            # button, input, label, card
+public/icons/               # PNG app icons for the manifest (192/512, rounded + maskable)
 scripts/
   create-user.mjs           # provision/reset an account (npm run user:create)
   household.mjs             # link/unlink accounts into a household (npm run household)
